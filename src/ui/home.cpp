@@ -14,13 +14,16 @@
 #define PET_SIZE S(74)
 #define FRIEND_SIZE S(56)
 #define TOAST_MS 2800
+// Tapping the clock this many times, each within the gap of the last, opens "Start over?".
+#define SECRET_TAPS 5
+#define SECRET_TAP_GAP_MS 600
 
 namespace {
 
-enum VisitPhase : uint8_t { VISIT_NONE, VISIT_ENTER, VISIT_PARTY, VISIT_LEAVE };
+enum VisitPhase : uint8_t { VISIT_NONE, VISIT_ENTER, VISIT_STAY, VISIT_LEAVE };
 
 lv_obj_t *scr, *pet, *friend_pet, *top_layer;
-lv_obj_t *clock_label, *coin_label, *temp_label, *weather_icon, *name_label;
+lv_obj_t *clock_pill, *clock_label, *coin_label, *temp_label, *weather_icon, *name_label;
 lv_obj_t *rings[4];
 lv_obj_t *toast, *toast_icon, *toast_label;
 lv_timer_t *toast_timer;
@@ -32,13 +35,16 @@ char last_name[PET_NAME_LEN];
 
 // Touch tracking.
 lv_point_t press_pt, last_pt;
-uint32_t press_ms, last_pat_ms;
+uint32_t press_ms, last_pat_ms, last_clock_tap_ms;
+int clock_taps;
 bool press_on_pet, press_moved, press_swallowed;
 float stroke_acc;
 
 // Friend visit.
 VisitPhase visit;
-float visit_t;
+float visit_t, next_cheer_t;
+int leave_from_x;
+float leave_from_offset;
 FriendSeen visitor;
 
 const uint32_t RING_COLORS[4] = {COL_HUNGER, COL_HAPPY, COL_ENERGY, COL_HYGIENE};
@@ -68,7 +74,7 @@ lv_obj_t *make_ring(lv_obj_t *parent, int i) {
 
 void build_hud() {
   // Clock on the left, coins centred, weather on the right.
-  lv_obj_t *clock_pill = ui_glass(scr, S(64), S(26));
+  clock_pill = ui_glass(scr, S(64), S(26));
   lv_obj_set_pos(clock_pill, S(6), S(6));
   clock_label = ui_label(clock_pill, "--:--", FONT_20, COL_TEXT);
   lv_obj_center(clock_label);
@@ -213,27 +219,30 @@ void update_visit(float dt) {
       pet_offset = -Sf(30) * ease;
       lv_obj_set_x(pet, pet_base_x + (int)pet_offset);
       if (k >= 1) {
-        visit = VISIT_PARTY;
+        visit = VISIT_STAY;
         visit_t = 0;
+        next_cheer_t = 4.5f;
         home_play(ANIM_DANCE);
         pet_view_play(friend_pet, ANIM_DANCE);
       }
       break;
     }
-    case VISIT_PARTY:
-      if (visit_t > 4.5f) {
-        visit = VISIT_LEAVE;
-        visit_t = 0;
-      } else if (!pet_view_busy(pet)) {
-        home_play(ANIM_HAPPY);
+    case VISIT_STAY:
+      // A short party on arrival, then the occasional cheer while they hang out.
+      if (visit_t < 4.5f) {
+        if (!pet_view_busy(pet)) home_play(ANIM_HAPPY);
+        if (!pet_view_busy(friend_pet)) pet_view_play(friend_pet, ANIM_HAPPY);
+      } else if (visit_t > next_cheer_t) {
+        next_cheer_t = visit_t + 12 + esp_random() % 14;
         pet_view_play(friend_pet, ANIM_HAPPY);
+        if (!g_pet.asleep && !pet_view_busy(pet)) home_play(ANIM_HAPPY);
       }
       break;
     case VISIT_LEAVE: {
       float k = visit_t / 1.2f;
       if (k > 1) k = 1;
-      lv_obj_set_x(friend_pet, friend_home + (int)((DISPLAY_WIDTH - friend_home) * k * k));
-      pet_offset = -Sf(30) * (1 - k);
+      lv_obj_set_x(friend_pet, leave_from_x + (int)((DISPLAY_WIDTH - leave_from_x) * k * k));
+      pet_offset = leave_from_offset * (1 - k);
       lv_obj_set_x(pet, pet_base_x + (int)pet_offset);
       if (k >= 1) {
         visit = VISIT_NONE;
@@ -255,7 +264,7 @@ void touch_cb(lv_event_t *e) {
   uint32_t ms = millis();
 
   if (code == LV_EVENT_PRESSED) {
-    press_swallowed = sheets_any_open() || visit != VISIT_NONE;
+    press_swallowed = sheets_any_open();
     if (sheets_any_open()) sheets_close_all();
     press_pt = last_pt = p;
     press_ms = ms;
@@ -286,6 +295,18 @@ void touch_cb(lv_event_t *e) {
   } else if (code == LV_EVENT_RELEASED) {
     pet_view_look_at(pet, false);
     if (press_moved || ms - press_ms > 450) return;
+    lv_area_t clock_area;
+    lv_obj_get_coords(clock_pill, &clock_area);
+    lv_area_increase(&clock_area, S(6), S(6));
+    if (_lv_area_is_point_on(&clock_area, &p, 0)) {
+      clock_taps = ms - last_clock_tap_ms < SECRET_TAP_GAP_MS ? clock_taps + 1 : 1;
+      last_clock_tap_ms = ms;
+      if (clock_taps >= SECRET_TAPS) {
+        clock_taps = 0;
+        sheets_open_start_over();
+      }
+      return;
+    }
     int poop = scene_poop_at(p.x, p.y);
     if (poop >= 0) {
       if (app_clean()) {
@@ -408,7 +429,6 @@ void ui_toast(const char *msg, Icon icon, uint32_t color) {
   lv_timer_set_repeat_count(toast_timer, 1);
 }
 
-bool ui_idle_on_home() { return !game_active() && !sheets_any_open() && visit == VISIT_NONE; }
 
 void ui_on_events(uint32_t ev) {
   char buf[64];
@@ -473,7 +493,14 @@ void ui_on_gestures(uint8_t g) {
   }
 }
 
-void ui_friend_visit(const FriendSeen &f, uint32_t gift, bool first_time) {
+void ui_pal_nearby(const FriendSeen &f) {
+  char buf[64];
+  snprintf(buf, sizeof(buf), "%s is nearby! Invite them from Pals", f.name);
+  ui_toast(buf, ICON_FRIENDS, COL_HAPPY);
+  power_pulse();
+}
+
+void ui_guest_arrive(const FriendSeen &f, uint32_t gift, bool first_time) {
   visitor = f;
   pet_view_set_look(friend_pet, f.form, f.palette, f.stage);
   pet_view_set_mood(friend_pet, MOOD_HAPPY);
@@ -483,6 +510,27 @@ void ui_friend_visit(const FriendSeen &f, uint32_t gift, bool first_time) {
   visit_t = 0;
   power_activity();
   char buf[64];
-  snprintf(buf, sizeof(buf), first_time ? "New friend %s! +%lu" : "%s came to visit! +%lu", f.name, (unsigned long)gift);
+  if (gift)
+    snprintf(buf, sizeof(buf), first_time ? "New friend %s! +%lu" : "%s came over! +%lu", f.name, (unsigned long)gift);
+  else
+    snprintf(buf, sizeof(buf), "%s came over!", f.name);
   ui_toast(buf, ICON_FRIENDS, COL_HAPPY);
+}
+
+void ui_guest_update(const FriendSeen &f) {
+  if (visit == VISIT_NONE || visit == VISIT_LEAVE) return;
+  visitor = f;
+  pet_view_set_look(friend_pet, f.form, f.palette, f.stage);
+}
+
+void ui_guest_leave() {
+  if (visit == VISIT_NONE || visit == VISIT_LEAVE) return;
+  // Walk off from wherever the guest is now.
+  leave_from_x = lv_obj_get_x(friend_pet);
+  leave_from_offset = pet_offset;
+  visit = VISIT_LEAVE;
+  visit_t = 0;
+  char buf[64];
+  snprintf(buf, sizeof(buf), "%s went home. Bye!", visitor.name);
+  ui_toast(buf, ICON_FRIENDS, COL_SUBTEXT);
 }

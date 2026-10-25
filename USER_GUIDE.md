@@ -108,7 +108,7 @@ Swipe up to open it; tap anywhere outside it to close.
 | **Light** | Turns the room light on or off |
 | **Heal** | Medicine — cures sickness. Giving it to a healthy pet just upsets it |
 | **Stats** | Detailed stats: all five bars, age, weight, care mistakes, pals |
-| **Pals** | Friends your pet has met over Bluetooth |
+| **Pals** | Tomos nearby right now (tap one to invite it over) and friends your pet has met |
 
 ### Food shop
 
@@ -195,6 +195,10 @@ Drake is the rarest form — it needs near-perfect care all the way through.
 
 A pet whose health stays at zero for half a day will **leave to go on an adventure**. A new egg appears in its place, and you keep your coins.
 
+### Starting over
+
+To begin again with a brand-new egg, tap the clock five times quickly, then confirm **Start over**. Your current pet and all its coins are gone for good; your pals list is kept.
+
 ### While the device is off
 
 Your pet keeps living. When you switch the device back on and it reconnects to Wi-Fi, it catches up on everything that happened while it was off — up to a week. A long holiday will leave you with a hungry, messy pet (or an empty nest), so give it a good feed before you go.
@@ -203,9 +207,11 @@ Your pet keeps living. When you switch the device back on and it reconnects to W
 
 ## Friends (Pals)
 
-If another Tomo device is nearby, the two pets find each other over Bluetooth. Every few hours a friend **comes to visit**: it walks on screen, the two pets dance together, yours gets a happiness boost, and you receive a **gift of 10–30 coins**. Pets that have visited are listed under **Pals**, with how many times they've come by.
+When another Tomo device comes within a few metres, the two pets hear each other over Bluetooth and you get a "… is nearby!" message. Open **Pals** to see who's in range under **Nearby**, and tap one to **invite** it over: it walks onto your screen and the two pets dance. The first visit, and the first visit after every 6 hours, also brings a **gift of 10–30 coins** and a happiness boost.
 
-Visits only happen while your pet is awake, the home screen is showing, and the other device is within a few metres.
+Your guest stays on screen while you carry on as normal, and walks home by itself about a minute after its device goes out of range. You can also tap it in **Pals** again (**Send home**), or invite a different pal instead. Pets that have come over are listed under **Friends**, with how many visits they've made.
+
+Your pet has to be awake and hatched to have guests. It can take up to a minute for a newly arrived Tomo to show up as nearby.
 
 ---
 
@@ -226,6 +232,6 @@ Visits only happen while your pet is awake, the home screen is showing, and the 
 | Weather never appears | Check `WEATHER_LAT`/`WEATHER_LON`, and that the network allows plain HTTP to `api.open-meteo.com`. |
 | Night and day are at the wrong times | Fix `TZ_POSIX` in `secrets.h` for your time zone. |
 | Pet won't eat or play | It's asleep, it's still an egg, it's too tired to play, or you need more coins. |
-| No visits from a friend | Both pets need to be awake on their home screens and close together; each friend visits at most once every 6 hours. |
+| A friend doesn't show as nearby | Keep the devices within a few metres and give it a minute: each one listens for others once a minute. |
 | Upload hangs or crashes on Windows | Set `PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1` in the terminal first (see Flashing). |
 | Wrong COM port | Run `pio device list` and update `upload_port` in `platformio.ini`. |

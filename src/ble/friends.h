@@ -16,7 +16,8 @@ struct FriendSeen {
 void friends_init(const PetState &pet);
 // Refreshes the beacon if anything it carries has changed.
 void friends_update_beacon(const PetState &pet);
-// Starts a short scan every minute; call from loop().
+// Starts a short scan every minute, or every 20 s in fast mode; call from loop().
 void friends_tick();
+void friends_fast_scan(bool on);
 // Pops one sighting reported by the scanner; false when none are pending.
 bool friends_poll(FriendSeen &out);

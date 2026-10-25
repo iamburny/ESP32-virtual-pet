@@ -10,12 +10,13 @@
 #define BEACON_LEN 19
 #define BEACON_VERSION 1
 #define SCAN_EVERY_MS 60000
+#define SCAN_EVERY_FAST_MS 20000
 #define SCAN_FOR_MS 5000
 
 static QueueHandle_t seen_queue;
 static uint8_t beacon[BEACON_LEN];
 static uint32_t last_scan_ms;
-static bool started;
+static bool started, fast;
 
 static void build_beacon(const PetState &pet, uint8_t *out) {
   memset(out, 0, BEACON_LEN);
@@ -95,10 +96,12 @@ void friends_update_beacon(const PetState &pet) {
 void friends_tick() {
   if (!started) return;
   uint32_t now = millis();
-  if (now - last_scan_ms < SCAN_EVERY_MS) return;
+  if (now - last_scan_ms < (fast ? SCAN_EVERY_FAST_MS : SCAN_EVERY_MS)) return;
   last_scan_ms = now;
   NimBLEScan *scan = NimBLEDevice::getScan();
   if (!scan->isScanning()) scan->start(SCAN_FOR_MS, false, true);
 }
+
+void friends_fast_scan(bool on) { fast = on; }
 
 bool friends_poll(FriendSeen &out) { return started && xQueueReceive(seen_queue, &out, 0) == pdTRUE; }

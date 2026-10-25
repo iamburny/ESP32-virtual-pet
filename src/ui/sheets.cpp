@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
 #include "app.h"
+#include "power.h"
 #include "display.h"
 #include "render/pet_view.h"
 #include "style.h"
@@ -55,6 +56,14 @@ lv_obj_t *sheet_title(lv_obj_t *parent, const char *text) {
 }
 
 void close_cb(lv_event_t *) { sheets_close_all(); }
+
+void start_over_cb(lv_event_t *) {
+  sheets_close_all();
+  app_start_over();
+  home_refresh_hud();
+  ui_toast("A new egg appeared!", ICON_HEART, COL_HAPPY);
+  power_activity();
+}
 
 // ---------------------------------------------------------------- feed
 
@@ -210,28 +219,86 @@ void open_stats() {
 
 // ---------------------------------------------------------------- pals
 
+lv_obj_t *pal_dot(lv_obj_t *parent, uint8_t palette, int x, int y) {
+  lv_obj_t *dot = ui_box(parent);
+  lv_obj_set_size(dot, S(14), S(14));
+  lv_obj_set_pos(dot, x, y);
+  lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_bg_color(dot, pet_palette_main(palette), 0);
+  lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+  return dot;
+}
+
+void nearby_cb(lv_event_t *e) {
+  uint32_t id = (uint32_t)(uintptr_t)lv_event_get_user_data(e);
+  sheets_close_all();
+  if (id == app_guest_id()) {
+    app_send_guest_home();
+  } else if (!app_invite(id)) {
+    if (g_pet.stage == STAGE_EGG)
+      ui_toast("Wait for it to hatch!", ICON_HEART, COL_HAPPY);
+    else if (g_pet.asleep)
+      ui_toast("Shh... sleeping", ICON_MOON, 0xE6ECFF);
+    else
+      ui_toast("They've wandered off", ICON_FRIENDS, COL_SUBTEXT);
+  }
+}
+
 void open_pals() {
-  lv_obj_t *s = open_sheet(S(236), DISPLAY_HEIGHT - S(240));
+  int h = S(236);
+  lv_obj_t *s = open_sheet(h, DISPLAY_HEIGHT - h - S(4));
   lv_obj_add_event_cb(s, close_cb, LV_EVENT_CLICKED, nullptr);
   sheet_title(s, "Pals");
 
+  int y = S(40);
+  lv_obj_t *head = ui_label(s, "Nearby", FONT_12, COL_SUBTEXT);
+  lv_obj_set_pos(head, S(14), y);
+  y += S(18);
+  int nearby = app_nearby_count();
+  if (nearby == 0) {
+    lv_obj_t *l = ui_label(s, "No Tomos in range right now", FONT_12, COL_SUBTEXT);
+    lv_obj_set_style_text_opa(l, 160, 0);
+    lv_obj_set_pos(l, S(14), y);
+    y += S(22);
+  }
+  // The guest (if any) is always listed first so it can be sent home.
+  int order[3], shown = 0;
+  for (int pass = 0; pass < 2; pass++)
+    for (int i = 0; i < nearby && shown < 3; i++)
+      if ((app_nearby(i).pet_id == app_guest_id()) == (pass == 0)) order[shown++] = i;
+  for (int k = 0; k < shown; k++) {
+    const FriendSeen &f = app_nearby(order[k]);
+    bool here = f.pet_id == app_guest_id();
+    lv_obj_t *row = ui_box(s);
+    lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(row, SHEET_W - S(16), S(32));
+    lv_obj_set_pos(row, S(8), y);
+    lv_obj_set_style_radius(row, S(12), 0);
+    lv_obj_set_style_bg_color(row, lv_color_hex(COL_PANEL_2), 0);
+    lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(row, lv_color_hex(COL_PANEL_3), LV_STATE_PRESSED);
+    lv_obj_add_event_cb(row, nearby_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)f.pet_id);
+    lv_obj_align(pal_dot(row, f.palette, 0, 0), LV_ALIGN_LEFT_MID, S(8), 0);
+    lv_obj_t *n = ui_label(row, f.name, FONT_14, COL_TEXT);
+    lv_obj_align(n, LV_ALIGN_LEFT_MID, S(28), 0);
+    lv_obj_t *act = ui_label(row, here ? "Send home" : "Invite", FONT_12, here ? COL_SUBTEXT : COL_ACCENT);
+    lv_obj_align(act, LV_ALIGN_RIGHT_MID, -S(10), 0);
+    y += S(36);
+  }
+
+  y += S(4);
+  head = ui_label(s, "Friends", FONT_12, COL_SUBTEXT);
+  lv_obj_set_pos(head, S(14), y);
+  y += S(18);
   if (g_friend_count == 0) {
-    lv_obj_t *l = ui_label(s, "No pals yet.\n\nBring another Tomo nearby and they'll come to visit!",
-                           FONT_12, COL_SUBTEXT);
-    lv_label_set_long_mode(l, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(l, SHEET_W - S(28));
-    lv_obj_set_pos(l, S(14), S(44));
+    lv_obj_t *l = ui_label(s, "Invite a nearby Tomo to make friends", FONT_12, COL_SUBTEXT);
+    lv_obj_set_style_text_opa(l, 160, 0);
+    lv_obj_set_pos(l, S(14), y);
     return;
   }
-  for (int i = 0; i < g_friend_count && i < 7; i++) {
+  for (int i = 0; i < g_friend_count && y + S(20) <= h - S(8); i++, y += S(22)) {
     const FriendRecord &f = g_friends[i];
-    int y = S(42) + i * S(26);
-    lv_obj_t *dot = ui_box(s);
-    lv_obj_set_size(dot, S(14), S(14));
-    lv_obj_set_pos(dot, S(14), y + S(2));
-    lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_color(dot, pet_palette_main(f.palette), 0);
-    lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+    pal_dot(s, f.palette, S(14), y + S(2));
     lv_obj_t *n = ui_label(s, f.name, FONT_14, COL_TEXT);
     lv_obj_set_pos(n, S(36), y);
     lv_obj_t *v = ui_label(s, "", FONT_12, COL_SUBTEXT);
@@ -318,6 +385,45 @@ void sheets_open_menu() {
     lv_obj_set_width(l, cell);
     lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_pos(l, x, S(47) + row * S(64));
+  }
+}
+
+void sheets_open_start_over() {
+  sheets_close_all();
+  // Dimmed backdrop; tapping outside the dialog cancels.
+  sheet = ui_box(layer);
+  lv_obj_add_flag(sheet, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_size(sheet, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+  lv_obj_set_style_bg_color(sheet, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(sheet, 150, 0);
+  lv_obj_add_event_cb(sheet, close_cb, LV_EVENT_CLICKED, nullptr);
+
+  int w = SHEET_W - S(8), btn_w = (w - S(30)) / 2;
+  lv_obj_t *d = ui_panel(sheet, w, S(150));
+  lv_obj_center(d);
+
+  lv_obj_t *title = ui_label(d, "Start over?", FONT_16, COL_TEXT);
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, S(14));
+  lv_obj_t *msg = ui_label(d, "", FONT_12, COL_SUBTEXT);
+  lv_label_set_text_fmt(msg, "%s and all your coins will be gone for good. A new egg will take their place.", g_pet.name);
+  lv_label_set_long_mode(msg, LV_LABEL_LONG_WRAP);
+  lv_obj_set_width(msg, w - S(24));
+  lv_obj_set_style_text_align(msg, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(msg, LV_ALIGN_TOP_MID, 0, S(40));
+
+  for (int i = 0; i < 2; i++) {
+    bool confirm = i == 1;
+    lv_obj_t *b = ui_box(d);
+    lv_obj_add_flag(b, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(b, btn_w, S(32));
+    lv_obj_align(b, confirm ? LV_ALIGN_BOTTOM_RIGHT : LV_ALIGN_BOTTOM_LEFT, confirm ? -S(12) : S(12), -S(12));
+    lv_obj_set_style_radius(b, S(12), 0);
+    lv_obj_set_style_bg_color(b, lv_color_hex(confirm ? COL_WARN : COL_PANEL_2), 0);
+    lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(b, lv_color_hex(confirm ? 0xD94444 : COL_PANEL_3), LV_STATE_PRESSED);
+    lv_obj_t *l = ui_label(b, confirm ? "Start over" : "Cancel", FONT_14, COL_TEXT);
+    lv_obj_center(l);
+    lv_obj_add_event_cb(b, confirm ? start_over_cb : close_cb, LV_EVENT_CLICKED, nullptr);
   }
 }
 

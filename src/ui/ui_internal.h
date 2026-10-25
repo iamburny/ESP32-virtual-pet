@@ -17,6 +17,8 @@ void home_show();
 // Sheets (menu drawer, feed, play, stats, friends) on the home screen.
 void sheets_init(lv_obj_t *layer);
 void sheets_open_menu();
+// "Are you sure?" dialog for replacing the pet with a new egg.
+void sheets_open_start_over();
 void sheets_close_all();
 bool sheets_any_open();
 void sheets_frame(uint32_t dt_ms);
