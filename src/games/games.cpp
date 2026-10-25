@@ -4,6 +4,7 @@
 #include "app.h"
 #include "display.h"
 #include "hw/imu.h"
+#include "layout.h"
 #include "power.h"
 #include "render/draw2d.h"
 #include "render/icons.h"
@@ -17,7 +18,7 @@
 #define COUNTDOWN_S 3
 #define MAX_ITEMS 10
 #define MAX_POPS 6
-#define CATCH_FEET_Y 300
+#define CATCH_FEET_Y S(300)
 
 namespace {
 
@@ -56,13 +57,13 @@ float frand() {
 
 void invalidate_circle(float x, float y, float r) {
   lv_area_t a = {(lv_coord_t)(x - r - 2), (lv_coord_t)(y - r - 2), (lv_coord_t)(x + r + 2), (lv_coord_t)(y + r + 2)};
-  lv_obj_invalidate_area(board, &a);
+  d2::invalidate(board, a);
 }
 
 void invalidate_span(float x, float y0, float y1, float r) {
   float top = fminf(y0, y1), bottom = fmaxf(y0, y1);
   lv_area_t a = {(lv_coord_t)(x - r - 4), (lv_coord_t)(top - r - 4), (lv_coord_t)(x + r + 4), (lv_coord_t)(bottom + r + 4)};
-  lv_obj_invalidate_area(board, &a);
+  d2::invalidate(board, a);
 }
 
 void draw_item(lv_draw_ctx_t *ctx, const Item &it) {
@@ -83,9 +84,9 @@ void draw_item(lv_draw_ctx_t *ctx, const Item &it) {
     case IT_GOLD_BUBBLE: {
       bool gold = it.kind == IT_GOLD_BUBBLE;
       lv_color_t c = lv_color_hex(gold ? 0xFFD54F : 0x9FE7FF);
-      float x = it.x + sinf(t * 2 + it.phase) * 6;
+      float x = it.x + sinf(t * 2 + it.phase) * Sf(6);
       d2::circle(ctx, x, it.y, it.r, c, gold ? 110 : 50);
-      d2::ring(ctx, x, it.y, it.r, 2, c, 220);
+      d2::ring(ctx, x, it.y, it.r, S(2), c, 220);
       d2::circle(ctx, x - it.r * 0.35f, it.y - it.r * 0.4f, it.r * 0.22f, lv_color_white(), 200);
       break;
     }
@@ -96,18 +97,18 @@ void board_draw_cb(lv_event_t *e) {
   lv_draw_ctx_t *ctx = lv_event_get_draw_ctx(e);
   if (kind == GAME_CATCH) {
     d2::grad_rect(ctx, 0, 0, W, CATCH_FEET_Y, 0, lv_color_hex(0x4FA3F7), lv_color_hex(0xFFD6E8));
-    d2::grad_rect(ctx, 0, CATCH_FEET_Y - 4, W, H - CATCH_FEET_Y + 4, 0, lv_color_hex(0x7BD389), lv_color_hex(0x3E9E5C));
+    d2::grad_rect(ctx, 0, CATCH_FEET_Y - S(4), W, H - CATCH_FEET_Y + S(4), 0, lv_color_hex(0x7BD389), lv_color_hex(0x3E9E5C));
   } else {
     d2::grad_rect(ctx, 0, 0, W, H, 0, lv_color_hex(0x1A6E9E), lv_color_hex(0x06182B));
     for (int i = 0; i < 5; i++)  // light shafts
-      d2::rect(ctx, 10 + i * 36, 0, 12, H, 6, lv_color_white(), 10);
+      d2::rect(ctx, SX(10 + i * 36), 0, SX(12), H, SX(6), lv_color_white(), 10);
   }
   for (const auto &it : items)
     if (it.live) draw_item(ctx, it);
   for (const auto &p : pops) {
     if (p.t <= 0) continue;
     float k = 1 - p.t / 0.35f;
-    d2::ring(ctx, p.x, p.y, p.r * (1 + k * 0.8f), 2, lv_color_hex(p.gold ? 0xFFD54F : 0xBDEFFF),
+    d2::ring(ctx, p.x, p.y, p.r * (1 + k * 0.8f), S(2), lv_color_hex(p.gold ? 0xFFD54F : 0xBDEFFF),
              (lv_opa_t)(255 * (1 - k)));
   }
 }
@@ -135,16 +136,16 @@ void spawn() {
     if (kind == GAME_CATCH) {
       float r = frand();
       it.kind = r < 0.45f ? IT_APPLE : r < 0.7f ? IT_CANDY : r < 0.78f ? IT_STAR : IT_ROCK;
-      it.r = 10;
-      it.x = 16 + frand() * (W - 32);
-      it.y = -12;
-      it.vy = 70 + progress * 120 + frand() * 30;
+      it.r = Sf(10);
+      it.x = S(16) + frand() * (W - S(32));
+      it.y = -Sf(12);
+      it.vy = Sf(70 + progress * 120 + frand() * 30);
     } else {
       it.kind = frand() < 0.07f ? IT_GOLD_BUBBLE : IT_BUBBLE;
-      it.r = 12 + frand() * 12;
-      it.x = 24 + frand() * (W - 48);
+      it.r = Sf(12 + frand() * 12);
+      it.x = S(24) + frand() * (W - S(48));
       it.y = H + it.r;
-      it.vy = -(40 + progress * 70 + frand() * 25);
+      it.vy = -Sf(40 + progress * 70 + frand() * 25);
     }
     return;
   }
@@ -164,19 +165,19 @@ void finish() {
   uint32_t coins_before = g_pet.coins;
   app_game_over(score);
 
-  lv_obj_t *panel = ui_panel(scr, 148, 150);
+  lv_obj_t *panel = ui_panel(scr, S(148), S(150));
   lv_obj_clear_flag(panel, LV_OBJ_FLAG_CLICKABLE);  // taps go to the screen, which closes the game
   lv_obj_center(panel);
-  lv_obj_t *title = ui_label(panel, "Time's up!", &lv_font_montserrat_16, COL_TEXT);
-  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 14);
-  lv_obj_t *big = ui_label(panel, "", &lv_font_montserrat_48, COL_TEXT);
+  lv_obj_t *title = ui_label(panel, "Time's up!", FONT_16, COL_TEXT);
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, S(14));
+  lv_obj_t *big = ui_label(panel, "", FONT_48, COL_TEXT);
   lv_label_set_text_fmt(big, "%lu", (unsigned long)score);
-  lv_obj_align(big, LV_ALIGN_TOP_MID, 0, 36);
-  lv_obj_t *coins = ui_label(panel, "", &lv_font_montserrat_14, COL_COIN);
+  lv_obj_align(big, LV_ALIGN_TOP_MID, 0, S(36));
+  lv_obj_t *coins = ui_label(panel, "", FONT_14, COL_COIN);
   lv_label_set_text_fmt(coins, "+%lu coins", (unsigned long)(g_pet.coins - coins_before));
-  lv_obj_align(coins, LV_ALIGN_TOP_MID, 0, 94);
-  lv_obj_t *hint = ui_label(panel, "tap to continue", &lv_font_montserrat_12, COL_SUBTEXT);
-  lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -10);
+  lv_obj_align(coins, LV_ALIGN_TOP_MID, 0, S(94));
+  lv_obj_t *hint = ui_label(panel, "tap to continue", FONT_12, COL_SUBTEXT);
+  lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -S(10));
   pet_view_play(pet, score >= 20 ? ANIM_DANCE : ANIM_HAPPY);
 }
 
@@ -186,22 +187,43 @@ void end_game() {
   scr = nullptr;
 }
 
+// What's on the panel lags the game state by a frame or two plus touch latency,
+// and fast bubbles rise a long way in that time, so a tap is matched against each
+// bubble's path over the last TAP_LAG_S rather than only its current position.
+#define TAP_LAG_S 0.15f
+
 bool hit_bubble(int px, int py) {
+  Item *best = nullptr;
+  float best_depth = 0;
   for (auto &it : items) {
     if (!it.live) continue;
-    float x = it.x + sinf(t * 2 + it.phase) * 6;
-    float dx = px - x, dy = py - it.y;
-    if (dx * dx + dy * dy > (it.r + 8) * (it.r + 8)) continue;
-    bool gold = it.kind == IT_GOLD_BUBBLE;
-    combo++;
-    score += gold ? 5 : 1 + combo / 5;
-    add_pop(x, it.y, it.r, gold);
-    invalidate_circle(x, it.y, it.r * 2);
-    it.live = false;
-    if (combo % 5 == 0) pet_view_play(pet, ANIM_HAPPY);
-    return true;
+    float x = it.x + sinf(t * 2 + it.phase) * Sf(6);
+    float y_then = it.y - it.vy * TAP_LAG_S;  // vy < 0, so further down the screen
+    float dx = px - x;
+    float dy = py < it.y ? it.y - py : py > y_then ? py - y_then : 0;
+    float d2 = dx * dx + dy * dy;
+    float reach = it.r + Sf(8);
+    if (d2 > reach * reach) continue;
+    // Rank by how deep in the bubble the tap is relative to its size, so a tap
+    // inside a big bubble isn't taken by a small one whose trail passes nearby.
+    float depth = d2 / (it.r * it.r);
+    if (!best || depth < best_depth) {
+      best = &it;
+      best_depth = depth;
+    }
   }
-  return false;
+  if (!best) return false;
+
+  Item &it = *best;
+  float x = it.x + sinf(t * 2 + it.phase) * Sf(6);
+  bool gold = it.kind == IT_GOLD_BUBBLE;
+  combo++;
+  score += gold ? 5 : 1 + combo / 5;
+  add_pop(x, it.y, it.r, gold);
+  invalidate_circle(x, it.y, it.r * 2);
+  it.live = false;
+  if (combo % 5 == 0) pet_view_play(pet, ANIM_HAPPY);
+  return true;
 }
 
 void touch_cb(lv_event_t *e) {
@@ -230,21 +252,22 @@ void update_catch(float dt) {
   if (dragging)
     target_v = (drag_x - pet_x) * 8;
   else if (imu_state().ok)
-    target_v = imu_state().gx * 420;
+    target_v = imu_state().gx * Sf(420);
   pet_v += (target_v - pet_v) * fminf(1, dt * 10);
   pet_x += pet_v * dt;
-  if (pet_x < 22) pet_x = 22, pet_v = 0;
-  if (pet_x > W - 22) pet_x = W - 22, pet_v = 0;
+  float edge = Sf(22);
+  if (pet_x < edge) pet_x = edge, pet_v = 0;
+  if (pet_x > W - edge) pet_x = W - edge, pet_v = 0;
   lv_obj_set_x(pet, (int)pet_x - lv_obj_get_width(pet) / 2);
-  pet_view_set_lean(pet, pet_v / 300);
+  pet_view_set_lean(pet, pet_v / Sf(300));
 
-  float catch_y = CATCH_FEET_Y - 40;
+  float catch_y = CATCH_FEET_Y - S(40);
   for (auto &it : items) {
     if (!it.live) continue;
     float oy = it.y;
     it.y += it.vy * dt;
     invalidate_span(it.x, oy, it.y, it.r);
-    if (it.y > catch_y && it.y < catch_y + 26 && fabsf(it.x - pet_x) < 30) {
+    if (it.y > catch_y && it.y < catch_y + S(26) && fabsf(it.x - pet_x) < S(30)) {
       it.live = false;
       switch (it.kind) {
         case IT_APPLE: score += 1; pet_view_emit_hearts(pet, 1); break;
@@ -256,7 +279,7 @@ void update_catch(float dt) {
           break;
       }
       if (it.kind != IT_ROCK && !pet_view_busy(pet)) pet_view_play(pet, ANIM_PAT);
-    } else if (it.y > H + 20) {
+    } else if (it.y > H + S(20)) {
       it.live = false;
     }
   }
@@ -267,7 +290,7 @@ void update_bubbles(float dt) {
     if (!it.live) continue;
     float oy = it.y;
     it.y += it.vy * dt;
-    invalidate_span(it.x, oy, it.y, it.r + 7);
+    invalidate_span(it.x, oy, it.y, it.r + Sf(7));
     if (it.y < -it.r) {
       it.live = false;
       combo = 0;
@@ -296,35 +319,35 @@ void start(GameKind k) {
   lv_obj_set_size(board, W, H);
   lv_obj_add_event_cb(board, board_draw_cb, LV_EVENT_DRAW_MAIN, nullptr);
 
-  int size = k == GAME_CATCH ? 50 : 44;
+  int size = S(k == GAME_CATCH ? 50 : 44);
   pet = pet_view_create(scr, size);
   lv_obj_clear_flag(pet, LV_OBJ_FLAG_CLICKABLE);
   pet_view_set_look(pet, g_pet.form, g_pet.palette, g_pet.stage);
   pet_view_set_mood(pet, MOOD_HAPPY);
   pet_x = W / 2.0f;
   pet_v = 0;
-  int feet = k == GAME_CATCH ? CATCH_FEET_Y : H - 6;
-  lv_obj_set_pos(pet, (int)pet_x - lv_obj_get_width(pet) / 2, feet + 8 - lv_obj_get_height(pet));
+  int feet = k == GAME_CATCH ? CATCH_FEET_Y : H - S(6);
+  lv_obj_set_pos(pet, (int)pet_x - lv_obj_get_width(pet) / 2, pet_view_top_for_feet(pet, feet));
 
-  lv_obj_t *sp = ui_glass(scr, 64, 28);
-  lv_obj_set_pos(sp, 6, 6);
-  score_label = ui_label(sp, "0", &lv_font_montserrat_20, COL_TEXT);
+  lv_obj_t *sp = ui_glass(scr, S(64), S(28));
+  lv_obj_set_pos(sp, S(6), S(6));
+  score_label = ui_label(sp, "0", FONT_20, COL_TEXT);
   lv_obj_center(score_label);
-  lv_obj_t *tp = ui_glass(scr, 44, 28);
-  lv_obj_set_pos(tp, W - 50, 6);
-  time_label = ui_label(tp, "60", &lv_font_montserrat_16, COL_TEXT);
+  lv_obj_t *tp = ui_glass(scr, S(44), S(28));
+  lv_obj_set_pos(tp, W - S(50), S(6));
+  time_label = ui_label(tp, "60", FONT_16, COL_TEXT);
   lv_obj_center(time_label);
-  combo_label = ui_label(scr, "", &lv_font_montserrat_14, COL_COIN);
-  lv_obj_align(combo_label, LV_ALIGN_TOP_MID, 0, 40);
+  combo_label = ui_label(scr, "", FONT_14, COL_COIN);
+  lv_obj_align(combo_label, LV_ALIGN_TOP_MID, 0, S(40));
   lv_obj_add_flag(combo_label, LV_OBJ_FLAG_HIDDEN);
 
-  count_label = ui_label(scr, "3", &lv_font_montserrat_48, COL_TEXT);
+  count_label = ui_label(scr, "3", FONT_48, COL_TEXT);
   lv_obj_center(count_label);
 
-  lv_obj_t *hint = ui_label(scr, k == GAME_CATCH ? "Tilt or drag to catch treats.\nAvoid the rocks!" : "Pop the bubbles!\nGold ones are worth more",
-                            &lv_font_montserrat_12, COL_TEXT);
+  lv_obj_t *hint = ui_label(scr, k == GAME_CATCH ? (BOARD_HAS_IMU ? "Tilt or drag to catch treats.\nAvoid the rocks!" : "Drag to catch treats.\nAvoid the rocks!") : "Pop the bubbles!\nGold ones are worth more",
+                            FONT_12, COL_TEXT);
   lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_align(hint, LV_ALIGN_CENTER, 0, 50);
+  lv_obj_align(hint, LV_ALIGN_CENTER, 0, S(50));
   lv_obj_set_user_data(count_label, hint);
 
   lv_obj_add_event_cb(scr, touch_cb, LV_EVENT_PRESSED, nullptr);

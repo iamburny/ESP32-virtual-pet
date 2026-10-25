@@ -2,8 +2,10 @@
 
 #include <lvgl.h>
 
-#define SCENE_GROUND_Y 232  // top of the grass
-#define SCENE_FEET_Y 266    // where the pet stands
+#include "layout.h"
+
+#define SCENE_GROUND_Y S(232)  // top of the grass
+#define SCENE_FEET_Y S(266)    // where the pet stands
 
 // Back layer (sky, sun/moon, stars, clouds, ground, poop) and front layer
 // (rain/snow/fog, lightning, lights-off darkness). Create the back layer

@@ -4,9 +4,14 @@
 #include <string.h>
 
 #include "draw2d.h"
+#include "layout.h"
 #include "icons.h"
 
 #define MAX_PARTICLES 24
+
+// Pixel amounts in this file are designed for a 74 px pet and scale with its size.
+#define U(v) ((v) * (p).size * (1.0f / 74))
+#define UP(v) ((v) * p->size * (1.0f / 74))
 
 namespace {
 
@@ -25,6 +30,11 @@ struct Face {
   EyeStyle eyes;
   MouthStyle mouth;
   bool sad_brows;
+};
+
+struct PaintAreas {
+  lv_area_t body, parts;
+  bool has_parts;
 };
 
 struct PetView {
@@ -53,6 +63,8 @@ struct PetView {
   float emit_timer;
 
   Particle parts[MAX_PARTICLES];
+  PaintAreas drawn;  // what was painted last frame, relative to the object
+  bool drawn_valid;
   uint32_t rng;
 };
 
@@ -130,17 +142,69 @@ Body body_geom(const PetView &p, const lv_area_t &a) {
   float base_h = p.size * sc * 0.88f * FORM_H[f];
   b.w = base_w * p.squash;
   b.h = base_h / p.squash;
-  b.ground = a.y2 - 8;
+  b.ground = a.y2 - U(8);
   float shake = 0;
-  if (p.acc & ACC_SCARF) shake += sinf(p.t * 45) * 0.7f;
-  if (p.mood == MOOD_SICK && !p.anim) shake += sinf(p.t * 30) * 0.5f;
-  if (p.anim == ANIM_HATCH) shake += sinf(p.t * 60) * 2.5f * (1 - p.anim_t / p.anim_dur);
-  float hover = p.form == FORM_GHOST ? -6 - 3 * sinf(p.t * 2.2f) : 0;
-  b.cx = (a.x1 + a.x2) / 2.0f + shake + p.lean * 6;
-  b.cy = b.ground - b.h / 2 - 2 + p.jump + hover;
+  if (p.acc & ACC_SCARF) shake += sinf(p.t * 45) * U(0.7f);
+  if (p.mood == MOOD_SICK && !p.anim) shake += sinf(p.t * 30) * U(0.5f);
+  if (p.anim == ANIM_HATCH) shake += sinf(p.t * 60) * U(2.5f) * (1 - p.anim_t / p.anim_dur);
+  float hover = p.form == FORM_GHOST ? -U(6) - U(3) * sinf(p.t * 2.2f) : 0;
+  b.cx = (a.x1 + a.x2) / 2.0f + shake + p.lean * U(6);
+  b.cy = b.ground - b.h / 2 - U(2) + p.jump + hover;
   b.top = b.cy - b.h / 2;
   b.shift = p.lean * b.w * 0.12f;
   return b;
+}
+
+// What the pet paints this frame, relative to the object's top-left: the body (with
+// room for ears, wings, umbrella and effects) and, separately, the box around its
+// particles, so a particle drifting far from the body doesn't drag in the space
+// between. Returns false when the whole object should be redrawn (egg, hatch flash).
+bool paint_areas(const PetView &p, int w, int h, PaintAreas &out) {
+  if (p.form == FORM_EGG || p.anim == ANIM_HATCH) return false;
+  lv_area_t a = {0, 0, (lv_coord_t)(w - 1), (lv_coord_t)(h - 1)};
+  Body b = body_geom(p, a);
+  // How far each form's decorations reach above the body and beyond its sides
+  // (mirrors the draw_* functions below).
+  float up = U(6), side = b.w * 0.5f;
+  switch (p.form) {
+    case FORM_BLOB: up = U(12); break;
+    case FORM_BUN: up = b.h * 0.55f + b.w * 0.1f + U(4); side = b.w * 0.65f + U(2); break;
+    case FORM_KITTY: up = b.h * 0.22f + U(4); side = b.w * 0.52f + b.h * 0.32f + U(5); break;
+    case FORM_SPROUT: up = U(26); break;
+    case FORM_STAR: up = U(24); break;
+    case FORM_DRAKE: up = U(14); side = LV_MAX(b.w * 0.84f, b.w * 0.42f + b.h * 0.32f + U(5)); break;
+    case FORM_GHOST: up = U(10); break;
+    default: break;
+  }
+  if (p.acc & ACC_UMBRELLA) {
+    up = LV_MAX(up, U(19) + b.w * 0.68f);
+    side = LV_MAX(side, b.w * 0.75f);
+  }
+  if (p.anim == ANIM_DIZZY) {
+    up = LV_MAX(up, U(15));
+    side = LV_MAX(side, b.w * 0.38f + U(7));
+  }
+  side += fabsf(b.shift) * 1.6f + U(4);
+  out.body = {(lv_coord_t)(b.cx - side), (lv_coord_t)(b.top - up), (lv_coord_t)(b.cx + side),
+              (lv_coord_t)(b.ground + U(6))};
+
+  out.has_parts = false;
+  for (const auto &q : p.parts) {
+    if (q.kind == P_NONE) continue;
+    // Reach of each particle's glyph or text box around its position (see draw_particles).
+    float m = q.size * 0.6f + 2;
+    if (q.kind == P_Z || q.kind == P_BANG) m = LV_MAX(U(20), FONT_28->line_height / 2.0f) + 2;
+    if (q.kind == P_STINK) m = U(12);
+    lv_area_t r = {(lv_coord_t)(q.x - m), (lv_coord_t)(q.y - m), (lv_coord_t)(q.x + m), (lv_coord_t)(q.y + m)};
+    if (out.has_parts)
+      _lv_area_join(&out.parts, &out.parts, &r);
+    else
+      out.parts = r;
+    out.has_parts = true;
+  }
+  _lv_area_intersect(&out.body, &out.body, &a);
+  if (out.has_parts) out.has_parts = _lv_area_intersect(&out.parts, &out.parts, &a);
+  return true;
 }
 
 Face pick_face(const PetView &p) {
@@ -175,14 +239,14 @@ void draw_egg(lv_draw_ctx_t *ctx, const PetView &p, const lv_area_t &a) {
   float rx = p.size * 0.36f, ry = p.size * 0.46f;
   float wob = 0;
   float burst = fmodf(p.t, 2.2f);
-  float amp = p.egg_progress > 0.85f ? 4 : p.egg_progress > 0.5f ? 2 : 0.8f;
+  float amp = p.egg_progress > 0.85f ? U(4) : p.egg_progress > 0.5f ? U(2) : U(0.8f);
   if (burst < 0.5f) wob = sinf(burst * 30) * amp;
-  wob += p.lean * 5;
+  wob += p.lean * U(5);
   float cx = (a.x1 + a.x2) / 2.0f + wob * 0.5f;
-  float ground = a.y2 - 8;
+  float ground = a.y2 - U(8);
   float cy = ground - ry;
 
-  d2::oval(ctx, cx, ground, rx * 0.9f, 4, lv_color_black(), LV_OPA_30);
+  d2::oval(ctx, cx, ground, rx * 0.9f, U(4), lv_color_black(), LV_OPA_30);
   // Narrower top: a slightly offset upper oval over a wider base.
   d2::grad_rect(ctx, cx - rx + wob * 0.4f, cy - ry, rx * 2, ry * 1.4f, LV_RADIUS_CIRCLE, hex(0xFFFBF3), hex(0xF5E6CF));
   d2::grad_rect(ctx, cx - rx * 1.06f, cy - ry * 0.35f, rx * 2.12f, ry * 1.35f, LV_RADIUS_CIRCLE, hex(0xF8ECDA),
@@ -201,7 +265,7 @@ void draw_egg(lv_draw_ctx_t *ctx, const PetView &p, const lv_area_t &a) {
     float pts[][2] = {{-0.9f, 0}, {-0.55f, -0.18f}, {-0.25f, 0.1f}, {0.05f, -0.2f}, {0.35f, 0.08f}, {0.65f, -0.15f}, {0.9f, 0.02f}};
     int n = 1 + (int)(k * 6);
     for (int i = 0; i < n && i < 6; i++)
-      d2::line(ctx, cx + pts[i][0] * rx, y0 + pts[i][1] * ry, cx + pts[i + 1][0] * rx, y0 + pts[i + 1][1] * ry, 2, crack);
+      d2::line(ctx, cx + pts[i][0] * rx, y0 + pts[i][1] * ry, cx + pts[i + 1][0] * rx, y0 + pts[i + 1][1] * ry, U(2), crack);
   }
 }
 
@@ -228,10 +292,10 @@ void draw_ears_back(lv_draw_ctx_t *ctx, const PetView &p, const Body &b) {
       float sway = sinf(t * 2.5f) * 12;
       float tcx = b.cx + side * b.w * 0.42f, tcy = b.cy + b.h * 0.05f;
       int a0 = side > 0 ? 300 + (int)sway : 120 + (int)sway, a1 = side > 0 ? 70 + (int)sway : 240 + (int)sway;
-      d2::arc(ctx, tcx, tcy, b.h * 0.32f, a0, a1, p.form == FORM_DRAKE ? 7 : 5, hex(c.dark));
+      d2::arc(ctx, tcx, tcy, b.h * 0.32f, a0, a1, U(p.form == FORM_DRAKE ? 7 : 5), hex(c.dark));
       if (p.form == FORM_DRAKE) {
         // Wings.
-        float flap = sinf(t * (p.anim == ANIM_DANCE ? 14 : 3)) * 5;
+        float flap = sinf(t * (p.anim == ANIM_DANCE ? 14 : 3)) * U(5);
         for (int s = -1; s <= 1; s += 2) {
           d2::tri(ctx, b.cx + s * b.w * 0.3f, b.cy - b.h * 0.15f, b.cx + s * b.w * 0.82f, b.cy - b.h * 0.42f - flap,
                   b.cx + s * b.w * 0.5f, b.cy + b.h * 0.18f, hex(c.dark), LV_OPA_90);
@@ -245,8 +309,8 @@ void draw_ears_back(lv_draw_ctx_t *ctx, const PetView &p, const Body &b) {
       for (int k = -2; k <= 2; k++) {
         if (k == 0) continue;
         float x0 = b.cx + k * b.w * 0.15f;
-        float x1 = x0 + sinf(t * 3 + k) * 4 + k * 2;
-        d2::line(ctx, x0, b.cy + b.h * 0.2f, x1, b.ground + 1, 6, hex(c.main), LV_OPA_90);
+        float x1 = x0 + sinf(t * 3 + k) * U(4) + k * U(2);
+        d2::line(ctx, x0, b.cy + b.h * 0.2f, x1, b.ground + U(1), U(6), hex(c.main), LV_OPA_90);
       }
       break;
     default: break;
@@ -257,7 +321,7 @@ void draw_feet(lv_draw_ctx_t *ctx, const PetView &p, const Body &b) {
   if (p.form == FORM_GHOST || p.form == FORM_JELLY) return;
   lv_color_t c = hex(pal(p).dark);
   float fy = b.cy + b.h * 0.46f;
-  float step = (p.anim == ANIM_DANCE) ? sinf(p.t * 10) * 2 : 0;
+  float step = (p.anim == ANIM_DANCE) ? sinf(p.t * 10) * U(2) : 0;
   d2::oval(ctx, b.cx - b.w * 0.22f, fy - step, b.w * 0.14f, b.h * 0.08f + 1, c);
   d2::oval(ctx, b.cx + b.w * 0.22f, fy + step, b.w * 0.14f, b.h * 0.08f + 1, c);
 }
@@ -293,7 +357,7 @@ void draw_head_front(lv_draw_ctx_t *ctx, const PetView &p, const Body &b) {
   float hx = b.cx + b.shift;
   switch (p.form) {
     case FORM_BLOB:
-      d2::arc(ctx, hx + 3, b.top - 3, 5, 150, 30, 3, hex(c.dark));
+      d2::arc(ctx, hx + U(3), b.top - U(3), U(5), 150, 30, U(3), hex(c.dark));
       break;
     case FORM_KITTY:
       for (int s = -1; s <= 1; s += 2) {
@@ -305,36 +369,36 @@ void draw_head_front(lv_draw_ctx_t *ctx, const PetView &p, const Body &b) {
       }
       break;
     case FORM_SPROUT: {
-      float sway = sinf(t * 1.8f) * 3;
-      float tx = hx + sway, ty = b.top - 13;
+      float sway = sinf(t * 1.8f) * U(3);
+      float tx = hx + sway, ty = b.top - U(13);
       lv_color_t g1 = hex(0x5CC46A), g2 = hex(0x8FE08F);
-      d2::line(ctx, hx, b.top + 3, tx, ty, 3, g1);
-      d2::line(ctx, tx, ty, tx - 11 + sway * 0.3f, ty - 4, 7, g1);
-      d2::line(ctx, tx, ty, tx + 10 + sway * 0.3f, ty - 7, 7, g2);
+      d2::line(ctx, hx, b.top + U(3), tx, ty, U(3), g1);
+      d2::line(ctx, tx, ty, tx - U(11) + sway * 0.3f, ty - U(4), U(7), g1);
+      d2::line(ctx, tx, ty, tx + U(10) + sway * 0.3f, ty - U(7), U(7), g2);
       break;
     }
     case FORM_MOCHI:
       for (int k = 0; k < 3; k++)
-        d2::circle(ctx, hx - b.w * 0.15f + k * b.w * 0.15f, b.top + b.h * 0.1f + (k == 1 ? -2 : 0), 1.6f,
+        d2::circle(ctx, hx - b.w * 0.15f + k * b.w * 0.15f, b.top + b.h * 0.1f + (k == 1 ? -U(2) : 0), U(1.6f),
                    lv_color_white(), LV_OPA_80);
-      d2::oval(ctx, hx + b.w * 0.3f, b.top + b.h * 0.08f, 6, 4, hex(0xFF9EC0));
-      d2::oval(ctx, hx + b.w * 0.36f, b.top + b.h * 0.02f, 5, 3, hex(0x8FE08F));
+      d2::oval(ctx, hx + b.w * 0.3f, b.top + b.h * 0.08f, U(6), U(4), hex(0xFF9EC0));
+      d2::oval(ctx, hx + b.w * 0.36f, b.top + b.h * 0.02f, U(5), U(3), hex(0x8FE08F));
       break;
     case FORM_GHOST:
-      d2::arc(ctx, hx - 2, b.top - 2, 5, 200, 20, 2, hex(c.light), LV_OPA_80);
+      d2::arc(ctx, hx - U(2), b.top - U(2), U(5), 200, 20, U(2), hex(c.light), LV_OPA_80);
       break;
     case FORM_STAR:
       for (int s = -1; s <= 1; s += 2) {
-        float ax = hx + s * b.w * 0.24f + sinf(t * 2 + s) * 2, ay = b.top - 14;
-        d2::line(ctx, hx + s * b.w * 0.12f, b.top + 4, ax, ay, 2, hex(c.dark));
-        float glow = 6 + sinf(t * 4 + s) * 1.5f;
+        float ax = hx + s * b.w * 0.24f + sinf(t * 2 + s) * U(2), ay = b.top - U(14);
+        d2::line(ctx, hx + s * b.w * 0.12f, b.top + U(4), ax, ay, U(2), hex(c.dark));
+        float glow = U(6) + sinf(t * 4 + s) * U(1.5f);
         d2::circle(ctx, ax, ay, glow, hex(0xFFE066), LV_OPA_30);
-        d2::circle(ctx, ax, ay, 3.5f, hex(0xFFE066));
+        d2::circle(ctx, ax, ay, U(3.5f), hex(0xFFE066));
       }
       break;
     case FORM_DRAKE:
       for (int s = -1; s <= 1; s += 2)
-        d2::tri(ctx, hx + s * b.w * 0.12f, b.top + 5, hx + s * b.w * 0.3f, b.top + 3, hx + s * b.w * 0.26f, b.top - 11,
+        d2::tri(ctx, hx + s * b.w * 0.12f, b.top + U(5), hx + s * b.w * 0.3f, b.top + U(3), hx + s * b.w * 0.26f, b.top - U(11),
                 hex(0xFFF3D6));
       break;
     default: break;
@@ -385,7 +449,7 @@ void draw_eyes(lv_draw_ctx_t *ctx, const PetView &p, const Body &b, const Face &
     }
     if (f.sad_brows) {
       float d = -s;  // inner end is towards the centre
-      d2::line(ctx, ex - d * rx * 1.1f, ey - ry - 2, ex + d * rx * 0.9f, ey - ry - 5, LV_MAX(1.5f, lw * 0.7f), ink,
+      d2::line(ctx, ex - d * rx * 1.1f, ey - ry - U(2), ex + d * rx * 0.9f, ey - ry - U(5), LV_MAX(1.5f, lw * 0.7f), ink,
                LV_OPA_80);
     }
     if (p.mood != MOOD_SICK)
@@ -397,8 +461,8 @@ void draw_eyes(lv_draw_ctx_t *ctx, const PetView &p, const Body &b, const Face &
     float my = b.cy + b.h * 0.1f;
     for (int s = -1; s <= 1; s += 2) {
       float x0 = b.cx + b.shift + s * b.w * 0.3f;
-      d2::line(ctx, x0, my, x0 + s * b.w * 0.22f, my - 2, 1, wh, LV_OPA_50);
-      d2::line(ctx, x0, my + 3, x0 + s * b.w * 0.22f, my + 5, 1, wh, LV_OPA_50);
+      d2::line(ctx, x0, my, x0 + s * b.w * 0.22f, my - U(2), LV_MAX(1.0f, U(1)), wh, LV_OPA_50);
+      d2::line(ctx, x0, my + U(3), x0 + s * b.w * 0.22f, my + U(5), LV_MAX(1.0f, U(1)), wh, LV_OPA_50);
     }
   }
 }
@@ -416,11 +480,11 @@ void draw_mouth(lv_draw_ctx_t *ctx, const PetView &p, const Body &b, const Face 
       break;
     case M_FROWN: d2::arc(ctx, mx, my + r * 0.8f, r * 0.85f, 210, 330, lw, ink); break;
     case M_FLAT: d2::line(ctx, mx - r * 0.55f, my + 1, mx + r * 0.55f, my + 1, lw, ink); break;
-    case M_O: d2::oval(ctx, mx, my + 2, r * 0.42f, r * 0.55f, ink); break;
+    case M_O: d2::oval(ctx, mx, my + U(2), r * 0.42f, r * 0.55f, ink); break;
     case M_CHEW: {
       float open = fabsf(sinf(p.anim_t * 9));
       if (open > 0.3f)
-        d2::oval(ctx, mx, my + 2, r * 0.6f, LV_MAX(1.5f, r * 0.7f * open), ink);
+        d2::oval(ctx, mx, my + U(2), r * 0.6f, LV_MAX(1.5f, r * 0.7f * open), ink);
       else
         d2::arc(ctx, mx, my - r * 0.5f, r * 0.8f, 30, 150, lw, ink);
       break;
@@ -439,8 +503,8 @@ void draw_accessories(lv_draw_ctx_t *ctx, const PetView &p, const Body &b) {
   float hx = b.cx + b.shift;
   if (p.acc & ACC_SCARF) {
     float ny = b.cy + b.h * 0.25f;
-    d2::line(ctx, b.cx - b.w * 0.4f, ny, b.cx + b.w * 0.4f, ny + 1, 7, hex(0xE84A5F));
-    d2::line(ctx, b.cx + b.w * 0.22f, ny, b.cx + b.w * 0.3f + sinf(p.t * 3) * 2, ny + 13, 6, hex(0xC93A4E));
+    d2::line(ctx, b.cx - b.w * 0.4f, ny, b.cx + b.w * 0.4f, ny + U(1), U(7), hex(0xE84A5F));
+    d2::line(ctx, b.cx + b.w * 0.22f, ny, b.cx + b.w * 0.3f + sinf(p.t * 3) * U(2), ny + U(13), U(6), hex(0xC93A4E));
   }
   if ((p.acc & ACC_SUNGLASSES) && p.mood != MOOD_SLEEPING) {
     float ey = b.cy - b.h * 0.07f;
@@ -448,19 +512,19 @@ void draw_accessories(lv_draw_ctx_t *ctx, const PetView &p, const Body &b) {
     lv_color_t g = hex(0x1E1E2A);
     for (int s = -1; s <= 1; s += 2) {
       float ex = hx + s * b.w * 0.2f;
-      d2::rect(ctx, ex - gw / 2 - 1, ey - gh / 2, gw + 2, gh, 4, g, 240);
-      d2::line(ctx, ex - gw * 0.3f, ey - gh * 0.15f, ex - gw * 0.05f, ey - gh * 0.3f, 2, lv_color_white(), LV_OPA_50);
+      d2::rect(ctx, ex - gw / 2 - U(1), ey - gh / 2, gw + U(2), gh, U(4), g, 240);
+      d2::line(ctx, ex - gw * 0.3f, ey - gh * 0.15f, ex - gw * 0.05f, ey - gh * 0.3f, U(2), lv_color_white(), LV_OPA_50);
     }
-    d2::line(ctx, hx - b.w * 0.1f, ey - gh * 0.2f, hx + b.w * 0.1f, ey - gh * 0.2f, 2, g);
+    d2::line(ctx, hx - b.w * 0.1f, ey - gh * 0.2f, hx + b.w * 0.1f, ey - gh * 0.2f, U(2), g);
   }
   if (p.acc & ACC_UMBRELLA) {
     float R = b.w * 0.68f;
-    float ux = hx + b.w * 0.05f, uy = b.top - 14 + sinf(p.t * 1.5f) * 1.5f;
-    d2::line(ctx, ux, uy, ux + b.w * 0.18f, b.cy + b.h * 0.05f, 2, hex(0x4A4458));
-    d2::arc(ctx, ux + b.w * 0.18f - 3, b.cy + b.h * 0.05f, 3, 0, 180, 2, hex(0x4A4458));
+    float ux = hx + b.w * 0.05f, uy = b.top - U(14) + sinf(p.t * 1.5f) * U(1.5f);
+    d2::line(ctx, ux, uy, ux + b.w * 0.18f, b.cy + b.h * 0.05f, U(2), hex(0x4A4458));
+    d2::arc(ctx, ux + b.w * 0.18f - U(3), b.cy + b.h * 0.05f, U(3), 0, 180, U(2), hex(0x4A4458));
     for (int i = 0; i < 4; i++)
       d2::arc(ctx, ux, uy, R, 180 + i * 45, 225 + i * 45, R, hex((i & 1) ? 0xFFD1DC : 0xFF6B8B));
-    d2::circle(ctx, ux, uy - R, 2.5f, hex(0x4A4458));
+    d2::circle(ctx, ux, uy - R, U(2.5f), hex(0x4A4458));
   }
 }
 
@@ -478,7 +542,7 @@ void draw_effects(lv_draw_ctx_t *ctx, const PetView &p, const Body &b) {
   if (p.anim == ANIM_DIZZY) {
     for (int i = 0; i < 3; i++) {
       float a = p.t * 5 + i * 2.094f;
-      icon_draw(ctx, ICON_CLEAN, b.cx + cosf(a) * b.w * 0.38f, b.top - 4 + sinf(a) * 5, 10, hex(0xFFE066));
+      icon_draw(ctx, ICON_CLEAN, b.cx + cosf(a) * b.w * 0.38f, b.top - U(4) + sinf(a) * U(5), U(10), hex(0xFFE066));
     }
   }
   if (p.anim == ANIM_HATCH) {
@@ -497,12 +561,22 @@ void draw_particles(lv_draw_ctx_t *ctx, const PetView &p, const lv_area_t &a) {
     switch (q.kind) {
       case P_HEART: icon_draw(ctx, ICON_HEART, x, y, sz, hex(0xFF5C8A)); break;
       case P_SPARKLE: icon_draw(ctx, ICON_CLEAN, x, y, sz, hex(0xFFE066)); break;
-      case P_Z: d2::text(ctx, x - 10, y - 8, 20, q.size > 12 ? "Z" : "z", q.size > 12 ? &lv_font_montserrat_20 : &lv_font_montserrat_14, lv_color_white(), LV_TEXT_ALIGN_CENTER, opa); break;
-      case P_CRUMB: d2::circle(ctx, x, y, 2, hex(0xE0A060), opa); break;
+      case P_Z: {
+        const lv_font_t *font = q.size > U(12) ? FONT_20 : FONT_14;
+        d2::text(ctx, x - U(20), y - font->line_height / 2, U(40), q.size > U(12) ? "Z" : "z", font, lv_color_white(),
+                 LV_TEXT_ALIGN_CENTER, opa);
+        break;
+      }
+      case P_CRUMB: d2::circle(ctx, x, y, U(2), hex(0xE0A060), opa); break;
       case P_SWEAT:
       case P_TEAR: icon_draw(ctx, ICON_DROP, x, y, sz, hex(0x8FD3FF)); break;
-      case P_STINK: d2::arc(ctx, x, y, 4, 200, 340, 2, hex(0x9AA07A), opa); d2::arc(ctx, x + 6, y - 2, 4, 20, 160, 2, hex(0x9AA07A), opa); break;
-      case P_BANG: d2::text(ctx, x - 10, y - 10, 20, "!", &lv_font_montserrat_28, hex(0xFFE066), LV_TEXT_ALIGN_CENTER, opa); break;
+      case P_STINK:
+        d2::arc(ctx, x, y, U(4), 200, 340, U(2), hex(0x9AA07A), opa);
+        d2::arc(ctx, x + U(6), y - U(2), U(4), 20, 160, U(2), hex(0x9AA07A), opa);
+        break;
+      case P_BANG:
+        d2::text(ctx, x - U(20), y - FONT_28->line_height / 2, U(40), "!", FONT_28, hex(0xFFE066), LV_TEXT_ALIGN_CENTER, opa);
+        break;
     }
   }
 }
@@ -526,8 +600,8 @@ void draw_cb(lv_event_t *e) {
   float eye_open = 1;
   if (pv->blink_t >= 0) eye_open = fabsf(pv->blink_t / 0.08f - 1);
 
-  float shadow_k = clampf(1 + (b.cy + b.h / 2 - b.ground) / 40, 0.5f, 1);
-  d2::oval(ctx, b.cx, b.ground, b.w * 0.42f * shadow_k, 3.5f, lv_color_black(), (lv_opa_t)(70 * shadow_k));
+  float shadow_k = clampf(1 + (b.cy + b.h / 2 - b.ground) / (pv->size * (40.0f / 74)), 0.5f, 1);
+  d2::oval(ctx, b.cx, b.ground, b.w * 0.42f * shadow_k, pv->size * (3.5f / 74), lv_color_black(), (lv_opa_t)(70 * shadow_k));
 
   draw_ears_back(ctx, *pv, b);
   draw_feet(ctx, *pv, b);
@@ -567,15 +641,15 @@ void update_anim(PetView &p, float dt, int w, int h) {
     p.anim_t += dt;
     float t = p.anim_t;
     switch (p.anim) {
-      case ANIM_HAPPY: jump = hop(t, 0.45f, 16) + hop(t - 0.6f, 0.45f, 12); break;
+      case ANIM_HAPPY: jump = hop(t, 0.45f, U(16)) + hop(t - 0.6f, 0.45f, U(12)); break;
       case ANIM_PAT: squash_target += 0.12f * sinf((float)M_PI * clampf(t / 0.4f, 0, 1)); break;
       case ANIM_EAT: squash_target += 0.04f * fabsf(sinf(t * 9)); break;
       case ANIM_REFUSE: lean_anim = sinf(t * 22) * 0.7f * (1 - t / p.anim_dur); break;
       case ANIM_DIZZY: lean_anim = sinf(t * 5) * 0.5f; break;
       case ANIM_SURPRISED:
-      case ANIM_WAKE: jump = hop(t, 0.35f, 14); break;
+      case ANIM_WAKE: jump = hop(t, 0.35f, U(14)); break;
       case ANIM_DANCE:
-        jump = -fabsf(sinf(t * 7)) * 9;
+        jump = -fabsf(sinf(t * 7)) * U(9);
         lean_anim = sinf(t * 3.5f) * 0.8f;
         break;
       case ANIM_MEDICINE: lean_anim = sinf(t * 30) * 0.25f; squash_target += 0.08f; break;
@@ -586,7 +660,8 @@ void update_anim(PetView &p, float dt, int w, int h) {
       float cycle = fmodf(t, 0.7f);
       if (cycle < dt && t < p.anim_dur * 0.85f)
         for (int i = 0; i < 2; i++)
-          emit(p, P_CRUMB, w / 2 + (frand(p) - 0.5f) * 20, h * 0.72f, (frand(p) - 0.5f) * 50, -30 - frand(p) * 30, 0.6f, 3);
+          emit(p, P_CRUMB, w / 2 + (frand(p) - 0.5f) * U(20), h * 0.72f, (frand(p) - 0.5f) * U(50),
+               -U(30) - frand(p) * U(30), 0.6f, U(3));
     }
     if (p.anim_t >= p.anim_dur) p.anim = ANIM_NONE;
   } else if (p.mood == MOOD_HAPPY || p.mood == MOOD_CONTENT) {
@@ -599,12 +674,12 @@ void update_anim(PetView &p, float dt, int w, int h) {
   }
   if (p.idle_hop_t >= 0) {
     p.idle_hop_t += dt;
-    jump += hop(p.idle_hop_t, 0.35f, p.mood == MOOD_HAPPY ? 10 : 6);
+    jump += hop(p.idle_hop_t, 0.35f, U(p.mood == MOOD_HAPPY ? 10 : 6));
     if (p.idle_hop_t > 0.35f) p.idle_hop_t = -1;
   }
 
   // Squash on landing.
-  if (p.prev_jump < -3 && jump > -1) p.squash_v += 2.2f;
+  if (p.prev_jump < -U(3) && jump > -U(1)) p.squash_v += 2.2f;
   p.prev_jump = jump;
   p.jump = jump;
   float acc = (squash_target - p.squash) * 220 - p.squash_v * 14;
@@ -647,19 +722,19 @@ void update_anim(PetView &p, float dt, int w, int h) {
     float cx = w / 2.0f, top = h * 0.35f;
     switch (p.mood) {
       case MOOD_SLEEPING:
-        emit(p, P_Z, cx + 18, top, 12, -18, 2.2f, frand(p) < 0.5f ? 14 : 10);
+        emit(p, P_Z, cx + U(18), top, U(12), -U(18), 2.2f, U(frand(p) < 0.5f ? 14 : 10));
         p.emit_timer = 1.6f;
         break;
       case MOOD_SICK:
-        emit(p, P_SWEAT, cx + 22, top + 8, 4, 25, 1.0f, 9);
+        emit(p, P_SWEAT, cx + U(22), top + U(8), U(4), U(25), 1.0f, U(9));
         p.emit_timer = 2.5f;
         break;
       case MOOD_SAD:
-        emit(p, P_TEAR, cx - 12, h * 0.6f, -2, 30, 0.8f, 8);
+        emit(p, P_TEAR, cx - U(12), h * 0.6f, -U(2), U(30), 0.8f, U(8));
         p.emit_timer = 3.0f;
         break;
       case MOOD_DIRTY:
-        emit(p, P_STINK, cx + (frand(p) - 0.5f) * 40, top + 10, 0, -20, 1.4f, 8);
+        emit(p, P_STINK, cx + (frand(p) - 0.5f) * U(40), top + U(10), 0, -U(20), 1.4f, U(8));
         p.emit_timer = 1.3f;
         break;
       default: p.emit_timer = 1; break;
@@ -675,8 +750,8 @@ void update_anim(PetView &p, float dt, int w, int h) {
     }
     q.x += q.vx * dt;
     q.y += q.vy * dt;
-    if (q.kind == P_CRUMB) q.vy += 160 * dt;
-    if (q.kind == P_HEART || q.kind == P_Z) q.x += sinf(q.life * 6) * 12 * dt;
+    if (q.kind == P_CRUMB) q.vy += U(160) * dt;
+    if (q.kind == P_HEART || q.kind == P_Z) q.x += sinf(q.life * 6) * U(12) * dt;
   }
 }
 
@@ -736,7 +811,7 @@ void pet_view_play(lv_obj_t *obj, PetAnim anim) {
     case ANIM_PAT: pet_view_emit_hearts(obj, 1); break;
     case ANIM_HATCH: pet_view_emit_sparkles(obj, 8); break;
     case ANIM_SURPRISED:
-    case ANIM_WAKE: emit(*p, P_BANG, w / 2.0f + 24, h * 0.3f, 0, -10, 0.9f, 20); break;
+    case ANIM_WAKE: emit(*p, P_BANG, w / 2.0f + UP(24), h * 0.3f, 0, -UP(10), 0.9f, 20); break;
     default: break;
   }
 }
@@ -750,16 +825,50 @@ void pet_view_look_at(lv_obj_t *obj, bool active, int x, int y) {
   lv_area_t a;
   lv_obj_get_coords(obj, &a);
   float cx = (a.x1 + a.x2) / 2.0f, cy = a.y1 + lv_area_get_height(&a) * 0.6f;
-  p->look_tx = clampf((x - cx) / 50.0f, -1, 1);
-  p->look_ty = clampf((y - cy) / 60.0f, -1, 1);
+  p->look_tx = clampf((x - cx) / UP(50), -1, 1);
+  p->look_ty = clampf((y - cy) / UP(60), -1, 1);
 }
 
 void pet_view_tick(lv_obj_t *obj, uint32_t dt_ms) {
   PetView *p = get(obj);
   float dt = clampf(dt_ms / 1000.0f, 0, 0.1f);
   p->t += dt;
-  update_anim(*p, dt, lv_obj_get_width(obj), lv_obj_get_height(obj));
-  lv_obj_invalidate(obj);
+  int w = lv_obj_get_width(obj), h = lv_obj_get_height(obj);
+  // The squash spring is stiff, so it is stepped at no more than 60 Hz whatever the
+  // frame rate; in one big step at a low frame rate its damping overshoots and the
+  // pet jitters and bounces.
+  for (float left = dt; left > 0; left -= 1.0f / 60) update_anim(*p, LV_MIN(left, 1.0f / 60), w, h);
+
+
+  // Redraw only what was painted last frame plus what will be painted now; the
+  // object itself is mostly empty space.
+  PaintAreas now;
+  bool partial = paint_areas(*p, w, h, now);
+  if (partial && p->drawn_valid) {
+    lv_area_t a;
+    lv_obj_get_coords(obj, &a);
+    auto invalidate_union = [&](const lv_area_t &x, const lv_area_t &y) {
+      lv_area_t u;
+      _lv_area_join(&u, &x, &y);
+      lv_area_move(&u, a.x1, a.y1);
+      d2::invalidate(obj, u);
+    };
+    invalidate_union(now.body, p->drawn.body);
+    if (now.has_parts && p->drawn.has_parts)
+      invalidate_union(now.parts, p->drawn.parts);
+    else if (now.has_parts || p->drawn.has_parts)
+      invalidate_union(now.has_parts ? now.parts : p->drawn.parts, now.has_parts ? now.parts : p->drawn.parts);
+  } else {
+    lv_obj_invalidate(obj);
+  }
+  p->drawn = now;
+  p->drawn_valid = partial;
+}
+
+int pet_view_top_for_feet(lv_obj_t *obj, int feet_y) {
+  PetView *p = get(obj);
+  // Matches body_geom(): the ground line sits U(8) above the object's bottom edge.
+  return feet_y + (int)lroundf(UP(8)) - lv_obj_get_height(obj);
 }
 
 bool pet_view_hit(lv_obj_t *obj, int x, int y) {
@@ -767,7 +876,7 @@ bool pet_view_hit(lv_obj_t *obj, int x, int y) {
   lv_area_t a;
   lv_obj_get_coords(obj, &a);
   Body b = body_geom(*p, a);
-  float m = 8;
+  float m = UP(8);
   return x >= b.cx - b.w / 2 - m && x <= b.cx + b.w / 2 + m && y >= b.top - m && y <= b.ground + 2;
 }
 
@@ -775,8 +884,8 @@ void pet_view_emit_hearts(lv_obj_t *obj, int count) {
   PetView *p = get(obj);
   int w = lv_obj_get_width(obj), h = lv_obj_get_height(obj);
   for (int i = 0; i < count; i++)
-    emit(*p, P_HEART, w / 2.0f + (frand(*p) - 0.5f) * 50, h * 0.5f, (frand(*p) - 0.5f) * 20, -28 - frand(*p) * 14,
-         1.3f + frand(*p) * 0.5f, 12 + (int)(frand(*p) * 6));
+    emit(*p, P_HEART, w / 2.0f + (frand(*p) - 0.5f) * UP(50), h * 0.5f, (frand(*p) - 0.5f) * UP(20), -UP(28) - frand(*p) * UP(14),
+         1.3f + frand(*p) * 0.5f, UP(12 + frand(*p) * 6));
 }
 
 void pet_view_emit_sparkles(lv_obj_t *obj, int count) {
@@ -784,9 +893,9 @@ void pet_view_emit_sparkles(lv_obj_t *obj, int count) {
   int w = lv_obj_get_width(obj), h = lv_obj_get_height(obj);
   for (int i = 0; i < count; i++) {
     float a = frand(*p) * 6.283f;
-    float sp = 40 + frand(*p) * 50;
-    emit(*p, P_SPARKLE, w / 2.0f, h * 0.6f, cosf(a) * sp, sinf(a) * sp - 20, 0.8f + frand(*p) * 0.4f,
-         9 + (int)(frand(*p) * 6));
+    float sp = UP(40 + frand(*p) * 50);
+    emit(*p, P_SPARKLE, w / 2.0f, h * 0.6f, cosf(a) * sp, sinf(a) * sp - UP(20), 0.8f + frand(*p) * 0.4f,
+         UP(9 + frand(*p) * 6));
   }
 }
 

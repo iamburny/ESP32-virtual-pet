@@ -1,10 +1,12 @@
 #include "imu.h"
 
+#include "board.h"
+
+#if BOARD_HAS_IMU
+
 #include <Arduino.h>
 #include <SensorQMI8658.hpp>
 #include <math.h>
-
-#include "board.h"
 
 #define QMI8658_ADDR 0x6B
 
@@ -120,3 +122,12 @@ uint8_t imu_update() {
 }
 
 const ImuState &imu_state() { return st; }
+
+#else  // no IMU on this board: tilt and motion gestures are simply absent
+
+static ImuState st;
+bool imu_init() { return false; }
+uint8_t imu_update() { return 0; }
+const ImuState &imu_state() { return st; }
+
+#endif

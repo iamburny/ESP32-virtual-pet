@@ -18,7 +18,15 @@ static lv_timer_t *frame_timer;
 static uint32_t last_frame_ms, last_stats_ms;
 
 static void frame_cb(lv_timer_t *) {
+  // Animate once per rendered frame. If the previous tick's changes haven't been
+  // drawn yet, ticking again only piles up more dirty areas for the same refresh
+  // (overflowing LVGL's area list turns them into one huge redraw). A screen with
+  // nothing changing never refreshes, so tick anyway after a while.
+  static uint32_t last_refresh_seen;
   uint32_t now = millis();
+  uint32_t refreshes = lvgl_port_refresh_count();
+  if (refreshes == last_refresh_seen && now - last_frame_ms < 250) return;
+  last_refresh_seen = refreshes;
   uint32_t dt = now - last_frame_ms;
   last_frame_ms = now;
   ui_frame(dt);

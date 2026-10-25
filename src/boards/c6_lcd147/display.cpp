@@ -1,4 +1,5 @@
 #include "display.h"
+#include "panel.h"
 
 // Pinout + JD9853 init sequence verified against Waveshare's official
 // ESP32-C6-Touch-LCD-1.47 demo (Arduino/examples/01_gfx_helloworld). The panel

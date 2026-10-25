@@ -7,8 +7,8 @@
 #include "ui.h"
 #include "ui_internal.h"
 
-#define SHEET_W 164
-#define SHEET_X 4
+#define SHEET_W (DISPLAY_WIDTH - S(8))
+#define SHEET_X S(4)
 
 namespace {
 
@@ -49,8 +49,8 @@ lv_obj_t *open_sheet(int h, int y) {
 }
 
 lv_obj_t *sheet_title(lv_obj_t *parent, const char *text) {
-  lv_obj_t *l = ui_label(parent, text, &lv_font_montserrat_16, COL_TEXT);
-  lv_obj_set_pos(l, 14, 12);
+  lv_obj_t *l = ui_label(parent, text, FONT_16, COL_TEXT);
+  lv_obj_set_pos(l, S(14), S(12));
   return l;
 }
 
@@ -80,36 +80,36 @@ void feed_cb(lv_event_t *e) {
 }
 
 void open_feed() {
-  lv_obj_t *s = open_sheet(196, DISPLAY_HEIGHT - 200);
+  lv_obj_t *s = open_sheet(S(196), DISPLAY_HEIGHT - S(200));
   sheet_title(s, "Feed");
-  lv_obj_t *coins = ui_label(s, "", &lv_font_montserrat_14, COL_COIN);
+  lv_obj_t *coins = ui_label(s, "", FONT_14, COL_COIN);
   lv_label_set_text_fmt(coins, "%lu", (unsigned long)g_pet.coins);
-  lv_obj_align(coins, LV_ALIGN_TOP_RIGHT, -14, 13);
-  lv_obj_t *ci = icon_create(s, ICON_COIN, 13, lv_color_hex(COL_COIN));
-  lv_obj_align_to(ci, coins, LV_ALIGN_OUT_LEFT_MID, -4, 0);
+  lv_obj_align(coins, LV_ALIGN_TOP_RIGHT, -S(14), S(13));
+  lv_obj_t *ci = icon_create(s, ICON_COIN, S(13), lv_color_hex(COL_COIN));
+  lv_obj_align_to(ci, coins, LV_ALIGN_OUT_LEFT_MID, -S(4), 0);
 
   for (int i = 0; i < FOOD_COUNT; i++) {
     const FoodInfo &f = FOODS[i];
     lv_obj_t *row = ui_box(s);
     lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_size(row, SHEET_W - 16, 34);
-    lv_obj_set_pos(row, 8, 40 + i * 38);
-    lv_obj_set_style_radius(row, 12, 0);
+    lv_obj_set_size(row, SHEET_W - S(16), S(34));
+    lv_obj_set_pos(row, S(8), S(40) + i * S(38));
+    lv_obj_set_style_radius(row, S(12), 0);
     lv_obj_set_style_bg_color(row, lv_color_hex(COL_PANEL_2), 0);
     lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
     lv_obj_set_style_bg_color(row, lv_color_hex(COL_PANEL_3), LV_STATE_PRESSED);
     if (g_pet.coins < f.price) lv_obj_set_style_opa(row, 120, 0);
     lv_obj_add_event_cb(row, feed_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)i);
 
-    lv_obj_t *ic = icon_create(row, FOOD_ICONS[i], 20, lv_color_hex(FOOD_COLORS[i]));
-    lv_obj_align(ic, LV_ALIGN_LEFT_MID, 8, 0);
-    lv_obj_t *name = ui_label(row, f.name, &lv_font_montserrat_14, COL_TEXT);
-    lv_obj_align(name, LV_ALIGN_LEFT_MID, 36, 0);
-    lv_obj_t *price = ui_label(row, "", &lv_font_montserrat_14, COL_COIN);
+    lv_obj_t *ic = icon_create(row, FOOD_ICONS[i], S(20), lv_color_hex(FOOD_COLORS[i]));
+    lv_obj_align(ic, LV_ALIGN_LEFT_MID, S(8), 0);
+    lv_obj_t *name = ui_label(row, f.name, FONT_14, COL_TEXT);
+    lv_obj_align(name, LV_ALIGN_LEFT_MID, S(36), 0);
+    lv_obj_t *price = ui_label(row, "", FONT_14, COL_COIN);
     lv_label_set_text_fmt(price, "%u", f.price);
-    lv_obj_align(price, LV_ALIGN_RIGHT_MID, -10, 0);
-    lv_obj_t *pc = icon_create(row, ICON_COIN, 11, lv_color_hex(COL_COIN));
-    lv_obj_align_to(pc, price, LV_ALIGN_OUT_LEFT_MID, -3, 0);
+    lv_obj_align(price, LV_ALIGN_RIGHT_MID, -S(10), 0);
+    lv_obj_t *pc = icon_create(row, ICON_COIN, S(11), lv_color_hex(COL_COIN));
+    lv_obj_align_to(pc, price, LV_ALIGN_OUT_LEFT_MID, -S(3), 0);
   }
 }
 
@@ -125,117 +125,118 @@ void game_cb(lv_event_t *e) {
 }
 
 lv_obj_t *game_card(lv_obj_t *parent, int x, Icon icon, uint32_t color, const char *name, int which) {
-  lv_obj_t *b = ui_icon_button(parent, 70, 86, icon, color, 30);
-  lv_obj_set_pos(b, x, 42);
-  lv_obj_set_style_radius(b, 18, 0);
-  lv_obj_align(lv_obj_get_child(b, 0), LV_ALIGN_TOP_MID, 0, 14);
-  lv_obj_t *l = ui_label(b, name, &lv_font_montserrat_14, COL_TEXT);
-  lv_obj_align(l, LV_ALIGN_BOTTOM_MID, 0, -12);
+  lv_obj_t *b = ui_icon_button(parent, S(70), S(86), icon, color, S(30));
+  lv_obj_set_pos(b, x, S(42));
+  lv_obj_set_style_radius(b, S(18), 0);
+  lv_obj_align(lv_obj_get_child(b, 0), LV_ALIGN_TOP_MID, 0, S(14));
+  lv_obj_t *l = ui_label(b, name, FONT_14, COL_TEXT);
+  lv_obj_align(l, LV_ALIGN_BOTTOM_MID, 0, -S(12));
   lv_obj_add_event_cb(b, game_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)which);
   return b;
 }
 
 void open_play() {
-  lv_obj_t *s = open_sheet(146, DISPLAY_HEIGHT - 150);
+  lv_obj_t *s = open_sheet(S(146), DISPLAY_HEIGHT - S(150));
   sheet_title(s, "Play");
-  lv_obj_t *hint = ui_label(s, "60s  -  win coins", &lv_font_montserrat_12, COL_SUBTEXT);
-  lv_obj_align(hint, LV_ALIGN_TOP_RIGHT, -14, 15);
-  game_card(s, 9, ICON_CATCH, COL_HUNGER, "Catch", 0);
-  game_card(s, 85, ICON_BUBBLE, COL_HYGIENE, "Bubbles", 1);
+  lv_obj_t *hint = ui_label(s, "60s  -  win coins", FONT_12, COL_SUBTEXT);
+  lv_obj_align(hint, LV_ALIGN_TOP_RIGHT, -S(14), S(15));
+  int gap = S(6), left = (SHEET_W - 2 * S(70) - gap) / 2;
+  game_card(s, left, ICON_CATCH, COL_HUNGER, "Catch", 0);
+  game_card(s, left + S(70) + gap, ICON_BUBBLE, COL_HYGIENE, "Bubbles", 1);
 }
 
 // ---------------------------------------------------------------- stats
 
 void stat_row(lv_obj_t *parent, int y, Icon icon, uint32_t color, const char *name, float value) {
-  lv_obj_t *ic = icon_create(parent, icon, 14, lv_color_hex(color));
-  lv_obj_set_pos(ic, 14, y);
-  lv_obj_t *l = ui_label(parent, name, &lv_font_montserrat_12, COL_SUBTEXT);
-  lv_obj_set_pos(l, 34, y);
+  lv_obj_t *ic = icon_create(parent, icon, S(14), lv_color_hex(color));
+  lv_obj_set_pos(ic, S(14), y);
+  lv_obj_t *l = ui_label(parent, name, FONT_12, COL_SUBTEXT);
+  lv_obj_set_pos(l, S(34), y);
   lv_obj_t *bar = lv_bar_create(parent);
   lv_obj_clear_flag(bar, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_set_size(bar, 74, 8);
-  lv_obj_set_pos(bar, 78, y + 4);
+  lv_obj_set_size(bar, SHEET_W - S(90), S(8));
+  lv_obj_set_pos(bar, S(78), y + S(4));
   lv_bar_set_range(bar, 0, 100);
   lv_bar_set_value(bar, (int)value, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(bar, lv_color_hex(COL_PANEL_3), LV_PART_MAIN);
   lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_bg_color(bar, lv_color_hex(value < 25 ? COL_WARN : color), LV_PART_INDICATOR);
-  lv_obj_set_style_radius(bar, 4, LV_PART_MAIN);
-  lv_obj_set_style_radius(bar, 4, LV_PART_INDICATOR);
+  lv_obj_set_style_radius(bar, S(4), LV_PART_MAIN);
+  lv_obj_set_style_radius(bar, S(4), LV_PART_INDICATOR);
 }
 
 void info_row(lv_obj_t *parent, int y, const char *key, const char *value) {
-  lv_obj_t *k = ui_label(parent, key, &lv_font_montserrat_12, COL_SUBTEXT);
-  lv_obj_set_pos(k, 14, y);
-  lv_obj_t *v = ui_label(parent, value, &lv_font_montserrat_12, COL_TEXT);
-  lv_obj_align(v, LV_ALIGN_TOP_RIGHT, -14, y);
+  lv_obj_t *k = ui_label(parent, key, FONT_12, COL_SUBTEXT);
+  lv_obj_set_pos(k, S(14), y);
+  lv_obj_t *v = ui_label(parent, value, FONT_12, COL_TEXT);
+  lv_obj_align(v, LV_ALIGN_TOP_RIGHT, -S(14), y);
 }
 
 void open_stats() {
-  lv_obj_t *s = open_sheet(292, 14);
+  lv_obj_t *s = open_sheet(S(292), S(14));
   lv_obj_add_event_cb(s, close_cb, LV_EVENT_CLICKED, nullptr);
 
-  lv_obj_t *name = ui_label(s, g_pet.name, &lv_font_montserrat_20, COL_TEXT);
-  lv_obj_set_pos(name, 14, 12);
-  lv_obj_t *sub = ui_label(s, "", &lv_font_montserrat_12, COL_SUBTEXT);
+  lv_obj_t *name = ui_label(s, g_pet.name, FONT_20, COL_TEXT);
+  lv_obj_set_pos(name, S(14), S(12));
+  lv_obj_t *sub = ui_label(s, "", FONT_12, COL_SUBTEXT);
   lv_label_set_text_fmt(sub, "%s %s  \xE2\x80\xA2  Gen %u", pet_stage_name(g_pet.stage), pet_form_name(g_pet.form),
                         g_pet.generation + 1);
-  lv_obj_set_pos(sub, 14, 38);
+  lv_obj_set_pos(sub, S(14), S(38));
 
-  int y = 64;
+  int y = S(64);
   stat_row(s, y, ICON_FOOD, COL_HUNGER, "Food", g_pet.hunger);
-  stat_row(s, y += 22, ICON_HEART, COL_HAPPY, "Joy", g_pet.happiness);
-  stat_row(s, y += 22, ICON_BOLT, COL_ENERGY, "Energy", g_pet.energy);
-  stat_row(s, y += 22, ICON_DROP, COL_HYGIENE, "Clean", g_pet.hygiene);
-  stat_row(s, y += 22, ICON_PILL, COL_HEALTH, "Health", g_pet.health);
+  stat_row(s, y += S(22), ICON_HEART, COL_HAPPY, "Joy", g_pet.happiness);
+  stat_row(s, y += S(22), ICON_BOLT, COL_ENERGY, "Energy", g_pet.energy);
+  stat_row(s, y += S(22), ICON_DROP, COL_HYGIENE, "Clean", g_pet.hygiene);
+  stat_row(s, y += S(22), ICON_PILL, COL_HEALTH, "Health", g_pet.health);
 
   char buf[24];
-  y += 30;
+  y += S(30);
   uint32_t age = g_pet.age_s;
   snprintf(buf, sizeof(buf), "%lud %luh %lum", (unsigned long)(age / 86400), (unsigned long)(age / 3600 % 24),
            (unsigned long)(age / 60 % 60));
   info_row(s, y, "Age", buf);
   snprintf(buf, sizeof(buf), "%.0f g", g_pet.weight * 10);
-  info_row(s, y += 20, "Weight", buf);
+  info_row(s, y += S(20), "Weight", buf);
   snprintf(buf, sizeof(buf), "%u", g_pet.care_mistakes);
-  info_row(s, y += 20, "Care mistakes", buf);
+  info_row(s, y += S(20), "Care mistakes", buf);
   snprintf(buf, sizeof(buf), "%d", g_friend_count);
-  info_row(s, y += 20, "Pals", buf);
-  info_row(s, y += 20, "Status", g_pet.sick ? "Sick" : g_pet.asleep ? "Asleep" : "Awake");
+  info_row(s, y += S(20), "Pals", buf);
+  info_row(s, y += S(20), "Status", g_pet.sick ? "Sick" : g_pet.asleep ? "Asleep" : "Awake");
 
-  lv_obj_t *hint = ui_label(s, "tap to close", &lv_font_montserrat_12, COL_SUBTEXT);
-  lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -10);
+  lv_obj_t *hint = ui_label(s, "tap to close", FONT_12, COL_SUBTEXT);
+  lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -S(10));
 }
 
 // ---------------------------------------------------------------- pals
 
 void open_pals() {
-  lv_obj_t *s = open_sheet(236, DISPLAY_HEIGHT - 240);
+  lv_obj_t *s = open_sheet(S(236), DISPLAY_HEIGHT - S(240));
   lv_obj_add_event_cb(s, close_cb, LV_EVENT_CLICKED, nullptr);
   sheet_title(s, "Pals");
 
   if (g_friend_count == 0) {
     lv_obj_t *l = ui_label(s, "No pals yet.\n\nBring another Tomo nearby and they'll come to visit!",
-                           &lv_font_montserrat_12, COL_SUBTEXT);
+                           FONT_12, COL_SUBTEXT);
     lv_label_set_long_mode(l, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(l, SHEET_W - 28);
-    lv_obj_set_pos(l, 14, 44);
+    lv_obj_set_width(l, SHEET_W - S(28));
+    lv_obj_set_pos(l, S(14), S(44));
     return;
   }
   for (int i = 0; i < g_friend_count && i < 7; i++) {
     const FriendRecord &f = g_friends[i];
-    int y = 42 + i * 26;
+    int y = S(42) + i * S(26);
     lv_obj_t *dot = ui_box(s);
-    lv_obj_set_size(dot, 14, 14);
-    lv_obj_set_pos(dot, 14, y + 2);
+    lv_obj_set_size(dot, S(14), S(14));
+    lv_obj_set_pos(dot, S(14), y + S(2));
     lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(dot, pet_palette_main(f.palette), 0);
     lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
-    lv_obj_t *n = ui_label(s, f.name, &lv_font_montserrat_14, COL_TEXT);
-    lv_obj_set_pos(n, 36, y);
-    lv_obj_t *v = ui_label(s, "", &lv_font_montserrat_12, COL_SUBTEXT);
+    lv_obj_t *n = ui_label(s, f.name, FONT_14, COL_TEXT);
+    lv_obj_set_pos(n, S(36), y);
+    lv_obj_t *v = ui_label(s, "", FONT_12, COL_SUBTEXT);
     lv_label_set_text_fmt(v, "%s  x%u", pet_form_name(f.form), f.visits);
-    lv_obj_align(v, LV_ALIGN_TOP_RIGHT, -14, y + 2);
+    lv_obj_align(v, LV_ALIGN_TOP_RIGHT, -S(14), y + S(2));
   }
 }
 
@@ -305,17 +306,18 @@ void menu_cb(lv_event_t *e) {
 void sheets_init(lv_obj_t *l) { layer = l; }
 
 void sheets_open_menu() {
-  lv_obj_t *s = open_sheet(140, DISPLAY_HEIGHT - 144);
+  lv_obj_t *s = open_sheet(S(140), DISPLAY_HEIGHT - S(144));
+  int cell = (SHEET_W - S(12)) / 4, btn = S(34);
   for (int i = 0; i < 8; i++) {
     int col = i % 4, row = i / 4;
-    int x = 6 + col * 38;
-    lv_obj_t *b = ui_icon_button(s, 34, 34, MENU[i].icon, MENU[i].color, 20);
-    lv_obj_set_pos(b, x + 2, 10 + row * 64);
+    int x = S(6) + col * cell;
+    lv_obj_t *b = ui_icon_button(s, btn, btn, MENU[i].icon, MENU[i].color, S(20));
+    lv_obj_set_pos(b, x + (cell - btn) / 2, S(10) + row * S(64));
     lv_obj_add_event_cb(b, menu_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)i);
-    lv_obj_t *l = ui_label(s, MENU[i].label, &lv_font_montserrat_12, COL_SUBTEXT);
-    lv_obj_set_width(l, 38);
+    lv_obj_t *l = ui_label(s, MENU[i].label, FONT_12, COL_SUBTEXT);
+    lv_obj_set_width(l, cell);
     lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_pos(l, x, 47 + row * 64);
+    lv_obj_set_pos(l, x, S(47) + row * S(64));
   }
 }
 

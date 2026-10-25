@@ -11,8 +11,8 @@
 #include "ui.h"
 #include "ui_internal.h"
 
-#define PET_SIZE 74
-#define FRIEND_SIZE 56
+#define PET_SIZE S(74)
+#define FRIEND_SIZE S(56)
 #define TOAST_MS 2800
 
 namespace {
@@ -46,72 +46,76 @@ const Icon RING_ICONS[4] = {ICON_FOOD, ICON_HEART, ICON_BOLT, ICON_DROP};
 
 lv_obj_t *make_ring(lv_obj_t *parent, int i) {
   lv_obj_t *arc = lv_arc_create(parent);
-  lv_obj_set_size(arc, 30, 30);
+  lv_obj_set_size(arc, S(30), S(30));
   lv_arc_set_rotation(arc, 270);
   lv_arc_set_bg_angles(arc, 0, 360);
   lv_arc_set_range(arc, 0, 100);
   lv_obj_remove_style(arc, nullptr, LV_PART_KNOB);
   lv_obj_clear_flag(arc, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_set_style_arc_width(arc, 3, LV_PART_MAIN);
+  lv_obj_set_style_arc_width(arc, S(3), LV_PART_MAIN);
   lv_obj_set_style_arc_color(arc, lv_color_white(), LV_PART_MAIN);
   lv_obj_set_style_arc_opa(arc, 50, LV_PART_MAIN);
-  lv_obj_set_style_arc_width(arc, 3, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_width(arc, S(3), LV_PART_INDICATOR);
   lv_obj_set_style_arc_color(arc, lv_color_hex(RING_COLORS[i]), LV_PART_INDICATOR);
   lv_obj_set_style_bg_opa(arc, 90, LV_PART_MAIN);
   lv_obj_set_style_bg_color(arc, lv_color_hex(0x0B0A1A), LV_PART_MAIN);
   lv_obj_set_style_radius(arc, LV_RADIUS_CIRCLE, LV_PART_MAIN);
   lv_obj_set_style_pad_all(arc, 0, LV_PART_MAIN);
-  lv_obj_t *ic = icon_create(arc, RING_ICONS[i], 13, lv_color_hex(RING_COLORS[i]));
+  lv_obj_t *ic = icon_create(arc, RING_ICONS[i], S(13), lv_color_hex(RING_COLORS[i]));
   lv_obj_center(ic);
   return arc;
 }
 
 void build_hud() {
-  lv_obj_t *clock_pill = ui_glass(scr, 64, 26);
-  lv_obj_set_pos(clock_pill, 6, 6);
-  clock_label = ui_label(clock_pill, "--:--", &lv_font_montserrat_20, COL_TEXT);
+  // Clock on the left, coins centred, weather on the right.
+  lv_obj_t *clock_pill = ui_glass(scr, S(64), S(26));
+  lv_obj_set_pos(clock_pill, S(6), S(6));
+  clock_label = ui_label(clock_pill, "--:--", FONT_20, COL_TEXT);
   lv_obj_center(clock_label);
 
-  lv_obj_t *coin_pill = ui_glass(scr, 46, 26);
-  lv_obj_set_pos(coin_pill, 74, 6);
-  lv_obj_t *ci = icon_create(coin_pill, ICON_COIN, 14, lv_color_hex(COL_COIN));
-  lv_obj_align(ci, LV_ALIGN_LEFT_MID, 6, 0);
-  coin_label = ui_label(coin_pill, "0", &lv_font_montserrat_14, COL_TEXT);
-  lv_obj_align(coin_label, LV_ALIGN_LEFT_MID, 23, 0);
+  lv_obj_t *coin_pill = ui_glass(scr, S(46), S(26));
+  int clock_right = S(6) + S(64), wx_left = DISPLAY_WIDTH - S(4) - S(44);
+  lv_obj_align(coin_pill, LV_ALIGN_TOP_MID, (clock_right + wx_left) / 2 - DISPLAY_WIDTH / 2, S(6));
+  lv_obj_t *ci = icon_create(coin_pill, ICON_COIN, S(14), lv_color_hex(COL_COIN));
+  lv_obj_align(ci, LV_ALIGN_LEFT_MID, S(6), 0);
+  coin_label = ui_label(coin_pill, "0", FONT_14, COL_TEXT);
+  lv_obj_align(coin_label, LV_ALIGN_LEFT_MID, S(23), 0);
 
-  lv_obj_t *wx_pill = ui_glass(scr, 44, 26);
-  lv_obj_set_pos(wx_pill, 124, 6);
-  weather_icon = icon_create(wx_pill, ICON_SUN, 16, lv_color_hex(0xFFE066));
-  lv_obj_align(weather_icon, LV_ALIGN_LEFT_MID, 5, 0);
-  temp_label = ui_label(wx_pill, "--", &lv_font_montserrat_12, COL_TEXT);
-  lv_obj_align(temp_label, LV_ALIGN_LEFT_MID, 23, 0);
+  lv_obj_t *wx_pill = ui_glass(scr, S(44), S(26));
+  lv_obj_align(wx_pill, LV_ALIGN_TOP_RIGHT, -S(4), S(6));
+  weather_icon = icon_create(wx_pill, ICON_SUN, S(16), lv_color_hex(0xFFE066));
+  lv_obj_align(weather_icon, LV_ALIGN_LEFT_MID, S(5), 0);
+  temp_label = ui_label(wx_pill, "--", FONT_12, COL_TEXT);
+  lv_obj_align(temp_label, LV_ALIGN_LEFT_MID, S(23), 0);
 
+  // Stat rings spread evenly across the width.
   for (int i = 0; i < 4; i++) {
     rings[i] = make_ring(scr, i);
-    lv_obj_set_pos(rings[i], 10 + i * 40, 38);
+    lv_obj_set_pos(rings[i], SX(10 + i * 40) + (SX(30) - S(30)) / 2, S(38));
   }
 
-  name_label = ui_label(scr, "", &lv_font_montserrat_12, COL_TEXT);
+  name_label = ui_label(scr, "", FONT_12, COL_TEXT);
   lv_obj_set_style_text_opa(name_label, 220, 0);
-  lv_obj_align(name_label, LV_ALIGN_TOP_MID, 0, 74);
+  lv_obj_align(name_label, LV_ALIGN_TOP_MID, 0, S(74));
 
   // Swipe-up handle.
   lv_obj_t *handle = ui_box(scr);
-  lv_obj_set_size(handle, 44, 5);
-  lv_obj_set_style_radius(handle, 3, 0);
+  lv_obj_set_size(handle, S(44), S(5));
+  lv_obj_set_style_radius(handle, S(3), 0);
   lv_obj_set_style_bg_color(handle, lv_color_white(), 0);
   lv_obj_set_style_bg_opa(handle, 140, 0);
-  lv_obj_align(handle, LV_ALIGN_BOTTOM_MID, 0, -8);
+  lv_obj_align(handle, LV_ALIGN_BOTTOM_MID, 0, -S(8));
 
-  toast = ui_glass(scr, 160, 30);
+  int toast_w = DISPLAY_WIDTH - S(12);
+  toast = ui_glass(scr, toast_w, S(30));
   lv_obj_set_style_bg_opa(toast, 200, 0);
-  lv_obj_align(toast, LV_ALIGN_TOP_MID, 0, 70);
-  toast_icon = icon_create(toast, ICON_HEART, 16, lv_color_white());
-  lv_obj_align(toast_icon, LV_ALIGN_LEFT_MID, 9, 0);
-  toast_label = ui_label(toast, "", &lv_font_montserrat_12, COL_TEXT);
+  lv_obj_align(toast, LV_ALIGN_TOP_MID, 0, S(70));
+  toast_icon = icon_create(toast, ICON_HEART, S(16), lv_color_white());
+  lv_obj_align(toast_icon, LV_ALIGN_LEFT_MID, S(9), 0);
+  toast_label = ui_label(toast, "", FONT_12, COL_TEXT);
   lv_label_set_long_mode(toast_label, LV_LABEL_LONG_SCROLL_CIRCULAR);
-  lv_obj_set_width(toast_label, 124);
-  lv_obj_align(toast_label, LV_ALIGN_LEFT_MID, 30, 0);
+  lv_obj_set_width(toast_label, toast_w - S(36));
+  lv_obj_align(toast_label, LV_ALIGN_LEFT_MID, S(30), 0);
   lv_obj_add_flag(toast, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -186,26 +190,27 @@ void update_tilt(float dt) {
   float gx = imu.gx;
   pet_view_set_lean(pet, gx * 1.8f);
   // Strong tilt makes the pet slide; it springs back to the centre when level.
-  float accel = fabsf(gx) > 0.3f && !g_pet.asleep && g_pet.stage != STAGE_EGG ? gx * 260 : -pet_offset * 6;
+  float accel = fabsf(gx) > 0.3f && !g_pet.asleep && g_pet.stage != STAGE_EGG ? gx * Sf(260) : -pet_offset * 6;
   pet_vel += accel * dt;
   pet_vel *= 0.9f;
   pet_offset += pet_vel * dt;
-  if (pet_offset > 48) pet_offset = 48, pet_vel = 0;
-  if (pet_offset < -48) pet_offset = -48, pet_vel = 0;
+  float max_offset = SX(48);
+  if (pet_offset > max_offset) pet_offset = max_offset, pet_vel = 0;
+  if (pet_offset < -max_offset) pet_offset = -max_offset, pet_vel = 0;
   lv_obj_set_x(pet, pet_base_x + (int)pet_offset);
 }
 
 void update_visit(float dt) {
   if (visit == VISIT_NONE) return;
   visit_t += dt;
-  int friend_home = DISPLAY_WIDTH - lv_obj_get_width(friend_pet) + 26;
+  int friend_home = DISPLAY_WIDTH - lv_obj_get_width(friend_pet) + S(26);
   switch (visit) {
     case VISIT_ENTER: {
       float k = visit_t / 1.2f;
       if (k > 1) k = 1;
       float ease = 1 - (1 - k) * (1 - k);
       lv_obj_set_x(friend_pet, DISPLAY_WIDTH + (int)((friend_home - DISPLAY_WIDTH) * ease));
-      pet_offset = -30 * ease;
+      pet_offset = -Sf(30) * ease;
       lv_obj_set_x(pet, pet_base_x + (int)pet_offset);
       if (k >= 1) {
         visit = VISIT_PARTY;
@@ -228,7 +233,7 @@ void update_visit(float dt) {
       float k = visit_t / 1.2f;
       if (k > 1) k = 1;
       lv_obj_set_x(friend_pet, friend_home + (int)((DISPLAY_WIDTH - friend_home) * k * k));
-      pet_offset = -30 * (1 - k);
+      pet_offset = -Sf(30) * (1 - k);
       lv_obj_set_x(pet, pet_base_x + (int)pet_offset);
       if (k >= 1) {
         visit = VISIT_NONE;
@@ -265,12 +270,12 @@ void touch_cb(lv_event_t *e) {
     int dx = p.x - last_pt.x, dy = p.y - last_pt.y;
     float dist = sqrtf(dx * dx + dy * dy);
     last_pt = p;
-    if (abs(p.x - press_pt.x) + abs(p.y - press_pt.y) > 12) press_moved = true;
+    if (abs(p.x - press_pt.x) + abs(p.y - press_pt.y) > S(12)) press_moved = true;
     pet_view_look_at(pet, true, p.x, p.y);
     bool can_pet = g_pet.stage != STAGE_EGG && !g_pet.asleep;
     if (press_on_pet && can_pet && pet_view_hit(pet, p.x, p.y)) {
       stroke_acc += dist;
-      if (stroke_acc > 45 && ms - last_pat_ms > 300) {
+      if (stroke_acc > Sf(45) && ms - last_pat_ms > 300) {
         stroke_acc = 0;
         last_pat_ms = ms;
         app_pat();
@@ -296,7 +301,7 @@ void touch_cb(lv_event_t *e) {
         app_pat();
         home_play(ANIM_PAT);
       }
-    } else if (p.y > DISPLAY_HEIGHT - 40) {
+    } else if (p.y > DISPLAY_HEIGHT - S(40)) {
       sheets_open_menu();
     }
   } else if (code == LV_EVENT_GESTURE) {
@@ -344,11 +349,11 @@ void ui_init() {
   pet = pet_view_create(scr, PET_SIZE);
   lv_obj_clear_flag(pet, LV_OBJ_FLAG_CLICKABLE);
   pet_base_x = (DISPLAY_WIDTH - lv_obj_get_width(pet)) / 2;
-  lv_obj_set_pos(pet, pet_base_x, SCENE_FEET_Y + 8 - lv_obj_get_height(pet));
+  lv_obj_set_pos(pet, pet_base_x, pet_view_top_for_feet(pet, SCENE_FEET_Y));
 
   friend_pet = pet_view_create(scr, FRIEND_SIZE);
   lv_obj_clear_flag(friend_pet, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_set_pos(friend_pet, DISPLAY_WIDTH, SCENE_FEET_Y + 8 - lv_obj_get_height(friend_pet));
+  lv_obj_set_pos(friend_pet, DISPLAY_WIDTH, pet_view_top_for_feet(friend_pet, SCENE_FEET_Y));
   pet_view_set_mirror(friend_pet, true);
   lv_obj_add_flag(friend_pet, LV_OBJ_FLAG_HIDDEN);
 

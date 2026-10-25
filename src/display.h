@@ -1,11 +1,9 @@
 #pragma once
 
-#include <Arduino_GFX_Library.h>
+#include <stdint.h>
 
-#define DISPLAY_WIDTH 172
-#define DISPLAY_HEIGHT 320
+#include "hw/board.h"
 
-extern Arduino_GFX *gfx;
-
+// Implemented per board in src/boards/<board>/display.cpp.
 void display_init();
-void display_set_backlight(uint8_t duty); // 0-255
+void display_set_backlight(uint8_t duty);  // 0-255

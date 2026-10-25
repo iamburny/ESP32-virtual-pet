@@ -2,6 +2,7 @@
 
 #include <lvgl.h>
 
+#include "layout.h"
 #include "render/icons.h"
 
 #define COL_PANEL 0x1C1B2E
@@ -41,7 +42,7 @@ inline lv_obj_t *ui_panel(lv_obj_t *parent, int w, int h) {
   lv_obj_t *o = ui_box(parent);
   lv_obj_add_flag(o, LV_OBJ_FLAG_CLICKABLE);  // swallow taps so they don't reach the scene
   lv_obj_set_size(o, w, h);
-  lv_obj_set_style_radius(o, 22, 0);
+  lv_obj_set_style_radius(o, S(22), 0);
   lv_obj_set_style_bg_color(o, lv_color_hex(COL_PANEL), 0);
   lv_obj_set_style_bg_opa(o, 240, 0);
   lv_obj_set_style_border_color(o, lv_color_hex(0xFFFFFF), 0);
@@ -63,12 +64,12 @@ inline lv_obj_t *ui_icon_button(lv_obj_t *parent, int w, int h, Icon icon, uint3
   lv_obj_t *b = ui_box(parent);
   lv_obj_add_flag(b, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_set_size(b, w, h);
-  lv_obj_set_style_radius(b, 14, 0);
+  lv_obj_set_style_radius(b, S(14), 0);
   lv_obj_set_style_bg_color(b, lv_color_hex(COL_PANEL_2), 0);
   lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
   lv_obj_set_style_bg_color(b, lv_color_hex(COL_PANEL_3), LV_STATE_PRESSED);
-  lv_obj_set_style_transform_width(b, -2, LV_STATE_PRESSED);
-  lv_obj_set_style_transform_height(b, -2, LV_STATE_PRESSED);
+  lv_obj_set_style_transform_width(b, -S(2), LV_STATE_PRESSED);
+  lv_obj_set_style_transform_height(b, -S(2), LV_STATE_PRESSED);
   lv_obj_t *ic = icon_create(b, icon, icon_size, lv_color_hex(icon_color));
   lv_obj_center(ic);
   return b;

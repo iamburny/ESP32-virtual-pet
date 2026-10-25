@@ -27,7 +27,11 @@
 #define LV_COLOR_DEPTH 16
 
 /*Swap the 2 bytes of RGB565 color. Useful if the display has an 8-bit interface (e.g. SPI)*/
+#if defined(BOARD_JC3248W535)
+#define LV_COLOR_16_SWAP 1  /*render big-endian so frames can be sent to the panel without converting them*/
+#else
 #define LV_COLOR_16_SWAP 0
+#endif
 
 /*Enable features to draw on transparent background.
  *It's required if opa, and transform_* style properties are used.
@@ -83,6 +87,10 @@
 /*Input device read period in milliseconds*/
 #define LV_INDEV_DEF_READ_PERIOD 30     /*[ms]*/
 
+/*Room for one invalidated area per raindrop position plus the pet, clouds and stars;
+ *overflowing it makes LVGL redraw the whole screen.*/
+#define LV_INV_BUF_SIZE 64
+
 /*Use a custom tick source that tells the elapsed time in milliseconds.
  *It removes the need to manually update the tick with `lv_tick_inc()`)*/
 #define LV_TICK_CUSTOM 1
@@ -120,7 +128,7 @@
     * The circumference of 1/4 circle are saved for anti-aliasing
     * radius * 4 bytes are used per circle (the most often used radiuses are saved)
     * 0: to disable caching */
-    #define LV_CIRCLE_CACHE_SIZE 4
+    #define LV_CIRCLE_CACHE_SIZE 16  /*the pet and scene use many distinct radii every frame*/
 #endif /*LV_DRAW_COMPLEX*/
 
 /**
@@ -369,10 +377,10 @@
 #define LV_FONT_MONTSERRAT_12 1
 #define LV_FONT_MONTSERRAT_14 1
 #define LV_FONT_MONTSERRAT_16 1
-#define LV_FONT_MONTSERRAT_18 0
+#define LV_FONT_MONTSERRAT_18 1
 #define LV_FONT_MONTSERRAT_20 1
 #define LV_FONT_MONTSERRAT_22 0
-#define LV_FONT_MONTSERRAT_24 0
+#define LV_FONT_MONTSERRAT_24 1
 #define LV_FONT_MONTSERRAT_26 0
 #define LV_FONT_MONTSERRAT_28 1
 #define LV_FONT_MONTSERRAT_30 0
@@ -380,7 +388,7 @@
 #define LV_FONT_MONTSERRAT_34 0
 #define LV_FONT_MONTSERRAT_36 0
 #define LV_FONT_MONTSERRAT_38 0
-#define LV_FONT_MONTSERRAT_40 0
+#define LV_FONT_MONTSERRAT_40 1
 #define LV_FONT_MONTSERRAT_42 0
 #define LV_FONT_MONTSERRAT_44 0
 #define LV_FONT_MONTSERRAT_46 0

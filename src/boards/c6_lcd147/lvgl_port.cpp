@@ -3,6 +3,7 @@
 #include <lvgl.h>
 
 #include "display.h"
+#include "panel.h"
 #include "esp_lcd_touch_axs5106l.h"
 #include "hw/board.h"
 
@@ -17,6 +18,7 @@ static lv_indev_drv_t indev_drv;
 static TouchFilter touch_filter;
 static bool filtering_press;
 static uint32_t stat_frames, stat_ms, stat_px;
+static volatile uint32_t refresh_count;
 
 static void disp_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_p) {
   uint32_t w = area->x2 - area->x1 + 1;
@@ -27,6 +29,7 @@ static void disp_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t 
 
 static void monitor_cb(lv_disp_drv_t *drv, uint32_t time_ms, uint32_t px) {
   stat_frames++;
+  refresh_count++;
   stat_ms += time_ms;
   stat_px += px;
 }
@@ -81,3 +84,5 @@ void lvgl_port_take_stats(uint32_t &frames, uint32_t &render_ms, uint32_t &pixel
   pixels = stat_px;
   stat_frames = stat_ms = stat_px = 0;
 }
+
+uint32_t lvgl_port_refresh_count() { return refresh_count; }

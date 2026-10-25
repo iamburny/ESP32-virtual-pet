@@ -47,6 +47,9 @@ void pet_view_set_mirror(lv_obj_t *obj, bool facing_left);
 // Advances animation by dt and invalidates the object.
 void pet_view_tick(lv_obj_t *obj, uint32_t dt_ms);
 
+// The y to give the object so the pet's feet rest on the screen row feet_y.
+int pet_view_top_for_feet(lv_obj_t *obj, int feet_y);
+
 // True if the screen point is on the pet's body.
 bool pet_view_hit(lv_obj_t *obj, int x, int y);
 
