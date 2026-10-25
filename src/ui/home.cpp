@@ -16,7 +16,7 @@
 #define TOAST_MS 2800
 // Tapping the clock this many times, each within the gap of the last, opens "Start over?".
 #define SECRET_TAPS 5
-#define SECRET_TAP_GAP_MS 600
+#define SECRET_TAP_GAP_MS 1000
 
 namespace {
 
@@ -37,7 +37,7 @@ char last_name[PET_NAME_LEN];
 lv_point_t press_pt, last_pt;
 uint32_t press_ms, last_pat_ms, last_clock_tap_ms;
 int clock_taps;
-bool press_on_pet, press_moved, press_swallowed;
+bool press_on_pet, press_on_clock, press_moved, press_swallowed;
 float stroke_acc;
 
 // Friend visit.
@@ -271,6 +271,21 @@ void touch_cb(lv_event_t *e) {
     press_moved = false;
     press_on_pet = pet_view_hit(pet, p.x, p.y);
     stroke_acc = 0;
+    // Counted on touch-down: quick taps can be too brief a lift to register as
+    // separate releases.
+    lv_area_t clock_area;
+    lv_obj_get_coords(clock_pill, &clock_area);
+    lv_area_increase(&clock_area, S(6), S(6));
+    press_on_clock = !press_swallowed && _lv_area_is_point_on(&clock_area, &p, 0);
+    if (press_on_clock) {
+      clock_taps = ms - last_clock_tap_ms < SECRET_TAP_GAP_MS ? clock_taps + 1 : 1;
+      last_clock_tap_ms = ms;
+      if (clock_taps >= SECRET_TAPS) {
+        clock_taps = 0;
+        press_swallowed = true;
+        sheets_open_start_over();
+      }
+    }
     return;
   }
   if (press_swallowed) return;
@@ -294,19 +309,7 @@ void touch_cb(lv_event_t *e) {
     }
   } else if (code == LV_EVENT_RELEASED) {
     pet_view_look_at(pet, false);
-    if (press_moved || ms - press_ms > 450) return;
-    lv_area_t clock_area;
-    lv_obj_get_coords(clock_pill, &clock_area);
-    lv_area_increase(&clock_area, S(6), S(6));
-    if (_lv_area_is_point_on(&clock_area, &p, 0)) {
-      clock_taps = ms - last_clock_tap_ms < SECRET_TAP_GAP_MS ? clock_taps + 1 : 1;
-      last_clock_tap_ms = ms;
-      if (clock_taps >= SECRET_TAPS) {
-        clock_taps = 0;
-        sheets_open_start_over();
-      }
-      return;
-    }
+    if (press_moved || ms - press_ms > 450 || press_on_clock) return;
     int poop = scene_poop_at(p.x, p.y);
     if (poop >= 0) {
       if (app_clean()) {

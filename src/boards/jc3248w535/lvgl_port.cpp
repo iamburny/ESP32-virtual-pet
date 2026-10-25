@@ -6,9 +6,15 @@
 #include "panel.h"
 
 #define TOUCH_ADDR 0x3B
-// The controller occasionally reports no touch for a frame mid-press; only
-// treat the finger as lifted after this many empty reads in a row.
+// Touch is polled by its own task, independent of the frame rate, so quick
+// taps aren't merged into one press while a slow frame renders.
+#define TOUCH_POLL_MS 10
+// The controller occasionally reports no touch for a single read mid-press;
+// only treat the finger as lifted after this many empty polls in a row.
 #define TOUCH_RELEASE_READS 3
+// LVGL stops reading input during screen-load animations; edges older than
+// this when finally read are dropped rather than replayed on the new screen.
+#define TOUCH_EDGE_MAX_AGE_MS 250
 
 static lv_disp_draw_buf_t draw_buf;
 static lv_color_t *framebuf[2];
@@ -17,6 +23,16 @@ static SemaphoreHandle_t push_start, push_done;
 static uint16_t *volatile push_buf;
 static lv_disp_drv_t disp_drv;
 static lv_indev_drv_t indev_drv;
+// Press/release edges from the poll task, so a tap that starts and ends between
+// two LVGL reads still reaches LVGL as a press followed by a release.
+struct TouchEdge {
+  bool pressed;
+  int16_t x, y;
+  uint32_t ms;
+};
+static QueueHandle_t touch_edges;
+static volatile int16_t touch_x, touch_y;
+static volatile bool touch_down;
 static TouchFilter touch_filter;
 static bool filtering_press;
 static uint32_t stat_frames, stat_ms, stat_px;
@@ -74,18 +90,55 @@ static bool touch_read(int16_t &x, int16_t &y) {
   return true;
 }
 
-static void touchpad_read_cb(lv_indev_drv_t *drv, lv_indev_data_t *data) {
-  static int16_t last_x, last_y;
-  static uint8_t empty_reads = TOUCH_RELEASE_READS;
-  int16_t x, y;
-  if (touch_read(x, y)) {
-    last_x = x;
-    last_y = y;
-    empty_reads = 0;
-  } else if (empty_reads < TOUCH_RELEASE_READS) {
-    empty_reads++;
+static void touch_task(void *) {
+  uint8_t empty_reads = TOUCH_RELEASE_READS;
+  bool down = false;
+  TickType_t wake = xTaskGetTickCount();
+  for (;;) {
+    vTaskDelayUntil(&wake, pdMS_TO_TICKS(TOUCH_POLL_MS));
+    int16_t x, y;
+    if (touch_read(x, y)) {
+      touch_x = x;
+      touch_y = y;
+      empty_reads = 0;
+    } else if (empty_reads < TOUCH_RELEASE_READS) {
+      empty_reads++;
+    }
+    bool now_down = empty_reads < TOUCH_RELEASE_READS;
+    if (now_down != down) {
+      down = now_down;
+      TouchEdge e = {down, touch_x, touch_y, millis()};
+      xQueueSend(touch_edges, &e, 0);
+    }
+    touch_down = down;
   }
-  bool pressed = empty_reads < TOUCH_RELEASE_READS;
+}
+
+static void touchpad_read_cb(lv_indev_drv_t *drv, lv_indev_data_t *data) {
+  static bool pressed;
+  static int16_t last_x, last_y;
+  TouchEdge e;
+  bool got = false;
+  while (xQueueReceive(touch_edges, &e, 0) == pdTRUE)
+    if (millis() - e.ms <= TOUCH_EDGE_MAX_AGE_MS) {
+      got = true;
+      break;
+    }
+  if (got) {
+    // Replay edges one per read so LVGL sees every press and release in order.
+    pressed = e.pressed;
+    last_x = e.x;
+    last_y = e.y;
+    data->continue_reading = uxQueueMessagesWaiting(touch_edges) > 0;
+  } else {
+    // No pending edges: follow the live state, which also recovers from any
+    // edge dropped because the queue was full or stale.
+    pressed = touch_down;
+    if (pressed) {
+      last_x = touch_x;
+      last_y = touch_y;
+    }
+  }
 
   // A press the filter swallows stays hidden from LVGL until the finger lifts.
   if (pressed && !filtering_press && touch_filter && touch_filter()) filtering_press = true;
@@ -124,6 +177,9 @@ void lvgl_port_init() {
   disp_drv.draw_buf = &draw_buf;
   disp_drv.direct_mode = 1;
   lv_disp_drv_register(&disp_drv);
+
+  touch_edges = xQueueCreate(16, sizeof(TouchEdge));
+  xTaskCreatePinnedToCore(touch_task, "touch", 3072, nullptr, 3, nullptr, 0);
 
   lv_indev_drv_init(&indev_drv);
   indev_drv.type = LV_INDEV_TYPE_POINTER;

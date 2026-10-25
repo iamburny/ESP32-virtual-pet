@@ -57,6 +57,15 @@ lv_obj_t *sheet_title(lv_obj_t *parent, const char *text) {
 
 void close_cb(lv_event_t *) { sheets_close_all(); }
 
+// The dialog opens mid-way through a burst of taps; ignore taps on the backdrop
+// for a moment so a stray extra one doesn't cancel it straight away.
+#define BACKDROP_GRACE_MS 750
+uint32_t start_over_opened_ms;
+
+void start_over_backdrop_cb(lv_event_t *) {
+  if (millis() - start_over_opened_ms >= BACKDROP_GRACE_MS) sheets_close_all();
+}
+
 void start_over_cb(lv_event_t *) {
   sheets_close_all();
   app_start_over();
@@ -396,7 +405,8 @@ void sheets_open_start_over() {
   lv_obj_set_size(sheet, DISPLAY_WIDTH, DISPLAY_HEIGHT);
   lv_obj_set_style_bg_color(sheet, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(sheet, 150, 0);
-  lv_obj_add_event_cb(sheet, close_cb, LV_EVENT_CLICKED, nullptr);
+  lv_obj_add_event_cb(sheet, start_over_backdrop_cb, LV_EVENT_CLICKED, nullptr);
+  start_over_opened_ms = millis();
 
   int w = SHEET_W - S(8), btn_w = (w - S(30)) / 2;
   lv_obj_t *d = ui_panel(sheet, w, S(150));
